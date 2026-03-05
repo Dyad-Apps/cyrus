@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.tmp
+.env
+@AutomationLog.txt
+*.onnx
+*.bin
+tests/Recording_2.m4a
+tests/Recording.m4a
