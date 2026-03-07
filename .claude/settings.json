@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(code --install-extension \"c:/source/cyrus/cyrus-companion/cyrus-companion-0.1.0.vsix\")",
+      "Bash(code --install-extension c:/source/cyrus/cyrus-companion/cyrus-companion-0.1.0.vsix --force)",
+      "Read(//c/Users/vasu4/.claude/**)",
+      "Bash(code --install-extension cyrus-companion-0.1.0.vsix --force)"
+    ]
+  }
+}

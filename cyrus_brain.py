@@ -1461,10 +1461,14 @@ async def handle_hook_connection(reader: asyncio.StreamReader,
         elif event == "pre_tool":
             tool = msg.get("tool", "")
             cmd  = msg.get("command", "")
+            print(f"[pre_tool] Received: tool={tool}, proj={proj!r}, cmd={cmd[:60]}")
             pw   = (session_mgr._perm_watchers.get(proj) or
                     next(iter(session_mgr._perm_watchers.values()), None))
             if pw:
                 pw.arm_from_hook(tool, cmd, loop)
+            else:
+                print(f"[pre_tool] No PermissionWatcher found for proj={proj!r}, "
+                      f"known={list(session_mgr._perm_watchers.keys())}")
 
         elif event == "post_tool":
             tool   = msg.get("tool", "")

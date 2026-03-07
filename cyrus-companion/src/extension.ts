@@ -29,10 +29,9 @@ const execAsync = promisify(child_process.exec);
 // ── Focus command candidates ──────────────────────────────────────────────────
 
 const FOCUS_CANDIDATES: readonly string[] = [
-    'workbench.view.extension.claude-code',
-    'workbench.view.claude',
-    'claude.focus',
-    'workbench.action.chat.open',
+    'claude-vscode.focus',              // Claude Code: Focus input
+    'claude-vscode.sidebar.open',       // Claude Code: Open in Side Bar
+    'workbench.view.extension.claude-sidebar',
 ];
 
 // ── Module-level state ────────────────────────────────────────────────────────
@@ -213,18 +212,63 @@ function end(socket: net.Socket, result: object): void {
 interface Result { ok: boolean; method?: string; error?: string; }
 
 async function submitText(text: string): Promise<Result> {
+    // 1. Bring VS Code to foreground (OS-level) + focus Claude Code input
+    await bringVscodeToFront();
     await focusChatPanel();
 
+    // 2. Write text to clipboard
     await vscode.env.clipboard.writeText(text);
-    await sleep(50);
+    await sleep(100);
 
-    const vscResult = await tryVscodeSubmit();
-    if (vscResult.ok) {
-        return vscResult;
+    // 3. Paste via VS Code's own command (runs in-process, always targets focused editor/webview)
+    try {
+        await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+        out.appendLine('[Cyrus] Pasted via editor.action.clipboardPasteAction');
+    } catch {
+        out.appendLine('[Cyrus] Paste command failed, falling back to keyboard sim');
+        return tryKeyboardSim();
     }
-    out.appendLine(`[Cyrus] VS Code commands failed (${vscResult.error}) — trying keyboard sim`);
+    await sleep(300);
 
-    return tryKeyboardSim();
+    // 4. Submit with Enter via SendKeys (VS Code is already foreground)
+    return tryEnterKey();
+}
+
+// ── Bring VS Code window to OS foreground ────────────────────────────────────
+
+async function bringVscodeToFront(): Promise<void> {
+    if (os.platform() !== 'win32') { return; }
+    try {
+        // Alt-key trick bypasses Windows' SetForegroundWindow restriction
+        // keybd_event(Alt down/up) lets a background process steal focus
+        const ps = `
+Add-Type @'
+using System; using System.Runtime.InteropServices;
+public class WinFocus {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+    public static void Activate(IntPtr h) {
+        ShowWindow(h, 9);
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        SetForegroundWindow(h);
+    }
+}
+'@
+$h = (Get-Process -Name Code | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle
+if ($h) { [WinFocus]::Activate($h) }
+`;
+        const encoded = Buffer.from(ps, 'utf16le').toString('base64');
+        await execAsync(
+            `powershell -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand ${encoded}`,
+            { timeout: 5000 }
+        );
+        await sleep(200);
+        out.appendLine('[Cyrus] Brought VS Code to foreground via SetForegroundWindow');
+    } catch (err) {
+        out.appendLine(`[Cyrus] Could not bring VS Code to foreground: ${err}`);
+    }
 }
 
 // ── Focus chat panel ──────────────────────────────────────────────────────────
@@ -272,19 +316,38 @@ async function tryVscodeSubmit(): Promise<Result> {
     }
 }
 
-// ── Platform keyboard simulation fallback ─────────────────────────────────────
+// ── Platform keyboard simulation ──────────────────────────────────────────────
+
+async function tryEnterKey(): Promise<Result> {
+    const platform = os.platform();
+    try {
+        if (platform === 'win32') {
+            const ps = "$s = New-Object -ComObject WScript.Shell; $s.SendKeys('{ENTER}')";
+            await execAsync(
+                `powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command "${ps}"`,
+                { timeout: 5000 }
+            );
+        } else if (platform === 'darwin') {
+            await execAsync(
+                `osascript -e 'tell application "System Events" to key code 36'`,
+                { timeout: 3000 }
+            );
+        } else {
+            await execAsync('xdotool key Return', { timeout: 3000 });
+        }
+        out.appendLine(`[Cyrus] Submitted via Enter key (${platform})`);
+        return { ok: true, method: `enter-key-${platform}` };
+    } catch (err) {
+        return { ok: false, error: `Enter key failed: ${err}` };
+    }
+}
 
 async function tryKeyboardSim(): Promise<Result> {
     const platform = os.platform();
 
     try {
         if (platform === 'win32') {
-            const ps = [
-                '$s = New-Object -ComObject WScript.Shell',
-                '$s.SendKeys("^v")',
-                'Start-Sleep -Milliseconds 80',
-                '$s.SendKeys("{ENTER}")',
-            ].join('; ');
+            const ps = "$s = New-Object -ComObject WScript.Shell; $s.SendKeys('^v'); Start-Sleep -Milliseconds 80; $s.SendKeys('{ENTER}')";
             await execAsync(
                 `powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command "${ps}"`,
                 { timeout: 5000 }
