@@ -1,0 +1,6 @@
+pyautogui
+pyperclip
+pygetwindow
+uiautomation
+comtypes
+python-dotenv

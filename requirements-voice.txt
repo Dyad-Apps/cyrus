@@ -1,0 +1,9 @@
+faster-whisper
+sounddevice
+numpy
+torch
+silero-vad
+edge-tts
+keyboard
+python-dotenv
+websockets
