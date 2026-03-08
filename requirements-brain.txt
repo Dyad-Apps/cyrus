@@ -4,3 +4,4 @@ pygetwindow
 uiautomation
 comtypes
 python-dotenv
+websockets

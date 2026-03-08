@@ -32,6 +32,7 @@ import argparse
 import queue as _stdlib_queue
 import socket
 
+import websockets
 import comtypes
 import pyautogui
 import pyperclip
@@ -44,6 +45,7 @@ from collections import deque
 BRAIN_HOST       = "0.0.0.0"
 BRAIN_PORT       = 8766
 HOOK_PORT        = 8767   # Claude Code Stop hook sends here
+MOBILE_PORT      = 8769   # WebSocket endpoint for mobile clients
 VSCODE_TITLE     = "Visual Studio Code"
 _CHAT_INPUT_HINT = "Message input"
 MAX_SPEECH_WORDS = 50
@@ -73,6 +75,9 @@ _tts_active_remote:   bool = False   # True while voice service is playing TTS
 # asyncio queues — set in main()
 _speak_queue:     asyncio.Queue = None   # (project, text) → sent to voice
 _utterance_queue: asyncio.Queue = None   # utterances received from voice
+
+# Mobile WebSocket clients
+_mobile_clients: set = set()             # active websocket connections
 
 # Dedicated submit thread queue — all VS Code UIA writes happen on one thread
 _submit_request_queue: _stdlib_queue.Queue = _stdlib_queue.Queue()
@@ -153,16 +158,26 @@ def _strip_fillers(text: str) -> str:
 # ── Send to voice ──────────────────────────────────────────────────────────────
 
 async def _send(msg: dict) -> None:
-    """Send one JSON message to voice. Fire-and-forget — never raises."""
+    """Send one JSON message to voice + mobile clients. Fire-and-forget."""
     global _voice_writer
-    if _voice_writer is None:
-        return
-    try:
-        async with _voice_lock:
-            _voice_writer.write((json.dumps(msg) + "\n").encode())
-            await _voice_writer.drain()
-    except Exception:
-        _voice_writer = None
+    # Send to TCP voice client
+    if _voice_writer is not None:
+        try:
+            async with _voice_lock:
+                _voice_writer.write((json.dumps(msg) + "\n").encode())
+                await _voice_writer.drain()
+        except Exception:
+            _voice_writer = None
+    # Broadcast to mobile WebSocket clients
+    if _mobile_clients and msg.get("type") == "speak":
+        payload = json.dumps(msg)
+        dead = set()
+        for ws in _mobile_clients.copy():
+            try:
+                await ws.send(payload)
+            except Exception:
+                dead.add(ws)
+        _mobile_clients.difference_update(dead)
 
 
 def _send_threadsafe(msg: dict, loop: asyncio.AbstractEventLoop) -> None:
@@ -1281,6 +1296,34 @@ async def voice_reader(reader: asyncio.StreamReader,
             break
 
 
+# ── Mobile WebSocket handler ──────────────────────────────────────────────────
+
+async def handle_mobile_ws(ws) -> None:
+    """Handle a single mobile WebSocket client."""
+    _mobile_clients.add(ws)
+    addr = ws.remote_address
+    print(f"[Brain] Mobile client connected: {addr}")
+    try:
+        async for raw in ws:
+            try:
+                msg = json.loads(raw)
+                mtype = msg.get("type", "")
+                if mtype == "utterance":
+                    text = msg.get("text", "").strip()
+                    if text:
+                        await _utterance_queue.put((text, False))
+                elif mtype == "ping":
+                    await ws.send(json.dumps({"type": "pong"}))
+            except json.JSONDecodeError:
+                pass
+    except Exception as e:
+        print(f"[Brain] Mobile client error: {type(e).__name__}: {e}")
+    finally:
+        _mobile_clients.discard(ws)
+        print(f"[Brain] Mobile client disconnected: {addr} "
+              f"(close_code={ws.close_code}, close_reason={ws.close_reason})")
+
+
 # ── Utterance routing loop ─────────────────────────────────────────────────────
 
 async def routing_loop(session_mgr: SessionManager,
@@ -1603,12 +1646,21 @@ async def main() -> None:
     )
     hook_addr = hook_server.sockets[0].getsockname()
     print(f"[Brain] Listening for Claude hooks on {hook_addr[0]}:{hook_addr[1]}")
+    # Mobile WebSocket server (port 8768)
+    mobile_server = await websockets.serve(
+        handle_mobile_ws,
+        args.host, MOBILE_PORT,
+        ping_interval=None,
+        ping_timeout=None,
+    )
+    print(f"[Brain] Listening for mobile clients on {args.host}:{MOBILE_PORT} (WebSocket)")
     print("[Brain] Waiting for voice to connect...")
 
     async with voice_server, hook_server:
         await asyncio.gather(
             voice_server.serve_forever(),
             hook_server.serve_forever(),
+            mobile_server.wait_closed(),
         )
 
 
