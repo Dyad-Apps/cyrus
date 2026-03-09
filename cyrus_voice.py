@@ -403,6 +403,12 @@ async def voice_loop(whisper_model, reader, writer, loop) -> None:
     global _brain_writer
     _brain_writer = writer
 
+    disconnected = asyncio.Event()
+
+    async def _reader_task():
+        await brain_reader(reader)
+        disconnected.set()
+
     utterance_queue: asyncio.Queue = asyncio.Queue()
     threading.Thread(
         target=vad_loop,
@@ -418,13 +424,16 @@ async def voice_loop(whisper_model, reader, writer, loop) -> None:
         except Exception:
             pass
 
-    asyncio.create_task(brain_reader(reader))
+    asyncio.create_task(_reader_task())
     asyncio.create_task(tts_worker())
 
     print("[Voice] Ready — streaming utterances to brain.")
 
-    while True:
-        audio = await utterance_queue.get()
+    while not disconnected.is_set():
+        try:
+            audio = await asyncio.wait_for(utterance_queue.get(), timeout=1.0)
+        except asyncio.TimeoutError:
+            continue
         # Drop stale utterances — keep only most recent
         while not utterance_queue.empty():
             try:
@@ -443,6 +452,8 @@ async def voice_loop(whisper_model, reader, writer, loop) -> None:
         during_tts = _tts_active.is_set() or _tts_pending.is_set()
         print(f"'{text}'" if not during_tts else f"[during TTS] '{text}'")
         await _send({"type": "utterance", "text": text, "during_tts": during_tts})
+
+    print("[Voice] Brain disconnected — reconnecting...")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
