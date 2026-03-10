@@ -164,8 +164,26 @@ def _strip_fillers(text: str) -> str:
 
 # ── Send to voice ──────────────────────────────────────────────────────────────
 
+def _sanitize_for_speech(text: str) -> str:
+    """Replace Unicode chars that TTS engines read as garbled UTF-8 bytes."""
+    return (text
+            .replace("\u2014", ", ")   # em dash  —
+            .replace("\u2013", ", ")   # en dash  –
+            .replace("\u2026", "...")  # ellipsis …
+            .replace("\u2018", "'")    # left single quote
+            .replace("\u2019", "'")    # right single quote
+            .replace("\u201c", '"')    # left double quote
+            .replace("\u201d", '"')    # right double quote
+            .replace("\u2022", ", ")   # bullet •
+            )
+
+
 async def _send(msg: dict) -> None:
     """Send one JSON message to voice + mobile clients. Fire-and-forget."""
+    # Sanitize text fields so TTS engines don't read raw UTF-8 bytes
+    for key in ("text", "full_text"):
+        if key in msg and isinstance(msg[key], str):
+            msg[key] = _sanitize_for_speech(msg[key])
     global _voice_writer
     # Send to TCP voice client
     if _voice_writer is not None:
