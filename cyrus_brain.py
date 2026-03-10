@@ -606,12 +606,23 @@ class PermissionWatcher:
     _SKIP_PROMPT_NAMES  = {_CHAT_INPUT_HINT, ""}
     _SKIP_PROMPT_LABELS = {"search", "find", "replace", "filter", "go to line"}
 
+    # Tools that never trigger permission dialogs — always auto-allowed
+    _AUTO_ALLOWED_TOOLS = {
+        "Read", "Grep", "Glob", "Agent", "TodoWrite", "TodoRead",
+        "AskFollowupQuestion", "AskUserQuestion", "Skill", "ToolSearch",
+        "TaskOutput", "TaskStop",
+    }
+
     def __init__(self, project_name: str = "", target_subname: str = ""):
         self._chat_doc          = None
         self._vscode_win        = None   # cached VS Code WindowControl
         self._pending           = False
         self._allow_btn         = None
         self._announced         = ""
+        self._pre_armed         = False   # hook pre-armed, waiting for UIA confirmation
+        self._pre_armed_tool    = ""
+        self._pre_armed_cmd     = ""
+        self._pre_armed_since   = 0.0
         self._prompt_pending    = False
         self._prompt_input_ctrl = None
         self._prompt_announced  = ""
@@ -806,19 +817,16 @@ class PermissionWatcher:
         return perm_btn, perm_cmd, prompt_ctrl, prompt_label
 
     def arm_from_hook(self, tool: str, cmd: str, loop: asyncio.AbstractEventLoop) -> None:
-        """Pre-arm from PreToolUse hook — announces before VS Code shows the dialog."""
+        """Pre-arm from PreToolUse hook — silent until UIA confirms a dialog exists."""
+        if tool in self._AUTO_ALLOWED_TOOLS:
+            return  # never needs permission
         if self._pending:
             return  # already waiting for a response
-        self._allow_btn     = "keyboard"
-        self._pending       = True
-        self._pending_since = time.time()
-        self._announced     = f"hook:{cmd}"
-        prefix = f"In {self.project_name}: " if self.project_name else ""
-        cmd_short = cmd[:120] if cmd else tool
-        prompt = f"{prefix}Allow {tool}: {cmd_short}. Say yes or no."
-        print(f"\n[Permission/hook] {prefix}{tool}: {cmd}")
-        _send_threadsafe({"type": "stop_speech"}, loop)
-        asyncio.run_coroutine_threadsafe(_speak_urgent(prompt), loop)
+        self._pre_armed       = True
+        self._pre_armed_tool  = tool
+        self._pre_armed_cmd   = cmd
+        self._pre_armed_since = time.time()
+        print(f"[Permission/hook] Pre-armed: {tool}: {cmd[:60]}")
 
     def handle_response(self, text: str) -> bool:
         if not self._pending or not self._allow_btn:
@@ -909,15 +917,26 @@ class PermissionWatcher:
 
                     if btn:
                         if not self._pending:
-                            # Fresh UIA detection — announce
+                            # Dialog confirmed by UIA — announce it
                             self._allow_btn     = btn
                             self._pending       = True
                             self._pending_since = time.time()
-                            self._announced     = cmd
+                            # Use richer hook info if pre-armed, else UIA-scanned cmd
+                            if self._pre_armed:
+                                tool_label = self._pre_armed_tool
+                                cmd_label  = self._pre_armed_cmd[:120] or tool_label
+                                self._announced = f"hook:{self._pre_armed_cmd}"
+                            else:
+                                tool_label = ""
+                                cmd_label  = cmd[:120] if cmd else ""
+                                self._announced = cmd
+                            self._pre_armed = False
                             prefix = f"In {self.project_name}: " if self.project_name else ""
-                            cmd_short = cmd[:120] if cmd else ""
-                            prompt = f"{prefix}Allow: {cmd_short}. Say yes or no."
-                            print(f"\n[Permission] {prefix}Claude wants to run: {cmd}")
+                            if tool_label:
+                                prompt = f"{prefix}Allow {tool_label}: {cmd_label}. Say yes or no."
+                            else:
+                                prompt = f"{prefix}Allow: {cmd_label}. Say yes or no."
+                            print(f"\n[Permission] {prefix}Claude wants to run: {cmd_label}")
                             _send_threadsafe({"type": "stop_speech"}, loop)
                             asyncio.run_coroutine_threadsafe(_speak_urgent(prompt), loop)
                         elif btn != "keyboard" and self._allow_btn == "keyboard":
@@ -925,6 +944,9 @@ class PermissionWatcher:
                             self._allow_btn = btn
                     elif not btn:
                         self._announced = ""
+                        # Clear pre-arm if no dialog appeared within 2 s (tool was auto-allowed)
+                        if self._pre_armed and time.time() > self._pre_armed_since + 2.0:
+                            self._pre_armed = False
                         # Keep pending for 20 s after announcement so transient
                         # UIA misses don't clear it before the user responds.
                         if self._pending and time.time() > getattr(self, "_pending_since", 0) + 20:
