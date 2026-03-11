@@ -22,6 +22,10 @@ Voice assistant layer for Claude Code in VS Code — speak naturally, Cyrus tran
 ## New Features for Cyrus 2.0
 | 12 | [Code Audit](./12-code-audit.md) | Code quality audit — anti-patterns, DRY violations, thread safety, security |
 | 13 | [Docker Containerization](./13-docker-containerization.md) | Headless brain mode, Docker setup, cross-platform support (macOS/Linux/Windows) |
+| 14 | [Test Suite](./14-test-suite.md) | pytest test plan — pure function tests, hook parsing, VAD, integration tests |
+| 15 | [Recommendations](./15-recommendations.md) | Feature recommendations — auth, config, health checks, packaging |
+| 16 | [Logging System](./16-logging-system.md) | Replace 218 print() calls with structured logging, env-configurable levels |
+| 17 | [Ruff Linting & Formatting](./17-ruff-linting.md) | Add ruff for linting + formatting — replaces flake8/black/isort in one tool |
 
 ## Quick Start
 
