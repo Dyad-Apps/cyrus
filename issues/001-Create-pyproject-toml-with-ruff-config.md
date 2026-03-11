@@ -1,0 +1,73 @@
+# Issue 001: Create pyproject.toml with Ruff Config
+
+## Sprint
+Cyrus 2.0 Rewrite — Foundation (Week 1)
+
+## Priority
+Critical
+
+## References
+- docs/17-ruff-linting.md — Ruff rule sets and configuration format
+- docs/12-code-audit.md — Code quality baseline
+
+## Description
+Create `cyrus2/pyproject.toml` with project metadata and Ruff linting/formatting configuration. This is the foundation for automated code quality checks. Ruff replaces flake8, pylint, isort, pyupgrade, and black with a single fast Rust-based tool.
+
+## Blocked By
+- None
+
+## Acceptance Criteria
+- [ ] File `cyrus2/pyproject.toml` exists with project metadata (name: cyrus, version: 2.0.0, python>=3.10)
+- [ ] Ruff config includes rule sets: E, F, W, I, UP, B
+- [ ] Target version set to py310, line-length to 88
+- [ ] Exclude patterns include `.venv` and `cyrus-companion`
+- [ ] Both `[tool.ruff.lint]` and `[tool.ruff.format]` sections present
+
+## Implementation Steps
+1. Navigate to project root: `cd /home/daniel/Projects/barf/cyrus`
+2. Create `cyrus2/` directory if it doesn't exist: `mkdir -p cyrus2`
+3. Create `cyrus2/pyproject.toml` with the following structure:
+   - Project metadata section: `[project]` with name, version, description, requires-python
+   - Ruff configuration section: `[tool.ruff]` with target-version, line-length, exclude
+   - Lint rules: `[tool.ruff.lint]` with select = ["E", "F", "W", "I", "UP", "B"]
+   - Format rules: `[tool.ruff.format]` (empty section, uses defaults)
+4. Verify file is valid TOML: `python -m toml cyrus2/pyproject.toml` or similar
+
+## Files to Create/Modify
+- `cyrus2/pyproject.toml` (new file)
+
+## Testing
+```bash
+# Verify the pyproject.toml is valid
+cat cyrus2/pyproject.toml
+
+# Once ruff is installed (issue 003), verify config is recognized
+ruff config cyrus2/
+```
+
+## Config Content Reference
+```toml
+[project]
+name = "cyrus"
+version = "2.0.0"
+description = "Cyrus 2.0 - AI voice assistant with VS Code integration"
+requires-python = ">=3.10"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+exclude = [".venv", "cyrus-companion"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.format]
+```
+
+## Rule Set Explanation
+- **E**: pycodestyle errors (whitespace, indentation, line length)
+- **F**: pyflakes (unused imports, undefined names, redefined variables)
+- **W**: pycodestyle warnings
+- **I**: isort (import sorting and grouping)
+- **UP**: pyupgrade (modernize syntax for target Python version)
+- **B**: flake8-bugbear (common bug patterns, mutable default args)
