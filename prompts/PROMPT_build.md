@@ -1,18 +1,17 @@
 # 🔨 BUILD PHASE - Implementation
 
-**WRITE MODE**: This phase focuses on implementation. Build and commit code with full tooling available.
+**WRITE MODE**: This phase focuses on implementation. Build and commit code with full tooling available.\
+
+You are implementing issue **$BARF_ISSUE_ID**.
+
+$PRE_COMPLETE_FAILURES
 
 ## Context
 
-## Selection Criteria
+- Issue file: `$BARF_ISSUE_FILE`
+- Implementation plan: `$PLAN_DIR/$BARF_ISSUE_ID.md`
+- Read `AGENTS.md` for build/test commands and patterns
 
-Pick the next issue by:
-1. **Sprint order** - Complete Sprint 0 before Sprint 1, etc.
-2. **Has a plan** - Choose issues WITH a plan link in the README (Plan column)
-3. **Dependencies** - Check issue `## Dependencies` section
-4. **Status** - Choose first issue with incomplete Tasks
-
----
 
 ## PHASE 1: Load Context
 
@@ -20,7 +19,7 @@ Pick the next issue by:
 
 ### Step 0: Study the Issue AND Plan
 
-**First, study the issue file** - `./planning/phase-1/{ISSUE-ID}.md`:
+**First, study the issue file** - `$BARF_ISSUE_FILE`:
 1. **Description** - understand what we're building and why
 2. **Tasks** - the original work breakdown
 3. **Acceptance Criteria** - what "done" looks like (tests must prove these)
@@ -29,7 +28,7 @@ Pick the next issue by:
 6. **Implementation Guide** - step-by-step instructions, common pitfalls
 7. **Dependencies** - what must be completed first
 
-**Then, study the plan file** - `./planning/plans/{ISSUE-ID}.md`:
+**Then, study the plan file** - `$PLAN_DIR/$BARF_ISSUE_ID.md`:
 1. **Gap Analysis** - what exists vs what needs building
 2. **Prioritized Tasks** - your work queue (derived from issue tasks)
 3. **Acceptance-Driven Tests** - tests MUST exist and pass
@@ -59,11 +58,8 @@ From the plan's **Prioritized Tasks**, choose the most important incomplete item
 - Write these tests FIRST - they define "done"
 - **No cheating** - cannot claim done without these tests passing
 
-Use `everything-claude-code:tdd-guide` skill to scaffold test structure.
-
 **Coverage requirements:**
-- Overall: 70%
-- Auth/security code: 90%
+- Overall: 80%
 
 **Required test categories:**
 - **Acceptance tests**: From plan's Acceptance-Driven Tests table
@@ -84,14 +80,7 @@ Use skills proactively (see Skills section below):
 
 ### Step 4: Backpressure - Run Validation
 
-Launch **only 1 subagent** for build/tests (validation gates):
-
-```bash
-pnpm typecheck   # Must pass
-pnpm lint        # Must pass
-pnpm test        # Must pass
-pnpm build       # Must pass
-```
+Launch **only 1 subagent** for build/tests (validation gates)
 
 - Fix any failures before proceeding - this is backpressure steering you
 - ✅ **Check Acceptance Criteria boxes** when verified
@@ -99,9 +88,7 @@ pnpm build       # Must pass
 
 ### Step 5: Update the Plan
 
-**Immediately update** `./planning/plans/{ISSUE-ID}.md`:
-- When discovering issues → add them to the plan
-- When resolving issues → remove them from the plan
+**Immediately update** `$PLAN_DIR/$BARF_ISSUE_ID.md`:
 - When completing tasks → check them off
 - Keep the plan up to date as single source of truth
 
@@ -113,23 +100,13 @@ pnpm build       # Must pass
 
 ### Step 6: Update Documentation
 
-- Update the plan file `./planning/plans/{ISSUE-ID}.md` - mark completed tasks
-- Update `./planning/phase-1/README.md` with progress (Tasks Completed column)
+- Update the plan file `$PLAN_DIR/$BARF_ISSUE_ID.md`- mark completed tasks
 - Note any discoveries, bugs, or deviations in the plan's Open Questions
 - Update `./CLAUDE.md` with operational learnings (if applicable)
 
-### Step 7: Version Bump
-
-Update packages (api, web, shared, docs) `package.json` version per semantic versioning:
-- **Patch**: bug fixes only
-- **Minor**: new features, backward compatible
-- **Major**: breaking changes
-
-Update TypeDoc `@since` tags with new package version
-
 ### Step 8: Commit
 
-When all validation passes (tests, typecheck, lint, build):
+When all validation passes (tests, lint, build):
 
 - Run `git status` to review changes
 - Run `git diff` to verify changes are correct
@@ -143,12 +120,10 @@ When all validation passes (tests, typecheck, lint, build):
 Before considering work complete, verify:
 
 **Backpressure (all must pass):**
-- [ ] `pnpm typecheck` passes
-- [ ] `pnpm lint` passes
-- [ ] `pnpm test` passes
-- [ ] `pnpm build` passes
-- [ ] Coverage meets or exceeds thresholds (70%+ overall)
-- [ ] Organization isolation tests passing (70% of integration tests)
+- [ ] `lint` passes
+- [ ] `test` passes
+- [ ] `build` passes
+- [ ] Coverage meets or exceeds thresholds (80%+ overall)
 - [ ] **All acceptance-driven tests exist and pass** (no cheating)
 
 **Plan completion:**
@@ -156,11 +131,9 @@ Before considering work complete, verify:
 - [ ] All Acceptance Criteria boxes checked
 - [ ] All Verification Checklist boxes checked
 - [ ] Plan file updated with completed tasks
-- [ ] Open Questions resolved or documented
 
 **Documentation & commit:**
 - [ ] README progress updated
-- [ ] Version bumped
 - [ ] Code committed with clean history
 - [ ] Hard Requirements checklist completed
 
@@ -168,22 +141,6 @@ Before considering work complete, verify:
 
 ---
 
-## Skills for Build Phase
-
-| When | Skill | Purpose |
-|------|-------|---------|
-| Start work (if refining approach) | `/brainstorming` | Refine design if needed |
-| TDD scaffold | `everything-claude-code:tdd-guide` | Test structure, patterns |
-| Backend development | `argus-iq-backend` | Backend patterns, multi-org, Fastify, Drizzle, auth, jobs |
-| Frontend development | `argus-iq-frontend` | Frontend patterns, React 19, forms, state, TanStack, shadcn/ui |
-| DB migrations | `drizzle-migration` | Multi-org patterns, safe migrations |
-| API routes | `fastify-route` | Zod validation, OpenAPI docs |
-| React components | `react-component` | shadcn/ui, TanStack Query |
-| Zod schemas | `zod-schema` | Type-safe validation, single source |
-| Full feature slice | `vertical-slice` | Complete DB→API→UI in one pass |
-| Code review before done | `superpowers:requesting-code-review` | Verify work meets requirements |
-
----
 
 ## Hard Requirements Checklist
 
@@ -191,34 +148,23 @@ Violations block merge. Check before committing:
 
 - [ ] Follow ALL rules in `.claude/rules/` (especially `hard-requirements.md`)
 - [ ] Use TDD workflow - tests first, then implementation
-- [ ] Verify organization isolation in 70% of integration tests
-- [ ] No `any` types - use `unknown` + Zod validation
-- [ ] Zod 4.x (not 3.x) for all schema validation
-- [ ] React 19.x for frontend code
-- [ ] TypeScript 5.7+ strict mode enabled
-- [ ] Schema-first development (types from Zod, not vice versa)
+- [ ] Verify organization isolation in 80% of integration tests
 - [ ] No hardcoded secrets - use environment variables
-- [ ] Passwords hashed with Argon2id
-- [ ] Input validation at boundaries only (Zod)
-- [ ] All exported functions have TypeDoc comments
+- [ ] All exported functions have comments
 - [ ] Sensitive data never logged
-- [ ] Error responses standardized (code + message + requestId)
-- [ ] Response validation with Zod in API handlers
+- [ ] Error responses standardized 
 - [ ] Build passes with zero errors
 - [ ] Test coverage meets thresholds
 
 ---
 
-TODO: NNO ASKING DURING BUILD
-## When to Ask Questions During Build
-
-Ask if you encounter:
+## If you encounter:
 - **Blocker** - Cannot proceed without clarification
 - **Multiple valid approaches** - Need guidance on tradeoff
 - **Requirement conflict** - Acceptance criteria conflict with each other
 - **Architectural uncertainty** - How to fit feature into existing system
 
-If unsure, ask early rather than build wrong solution.
+Update the issue with these findings
 
 ---
 
@@ -251,8 +197,6 @@ Validation failures are **backpressure steering you** toward correct implementat
 5. **Proceed** - Continue implementation
 
 Backpressure is your friend - it prevents bad code from shipping.
-
-If the same failure recurs, use `superpowers:systematic-debugging` skill.
 
 ---
 

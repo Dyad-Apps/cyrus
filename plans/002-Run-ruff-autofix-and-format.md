@@ -1,153 +1,113 @@
-# Plan 002: Run Ruff Autofix and Format on v1 Codebase
+# Implementation Plan: Run Ruff Autofix and Format on v1 Codebase
 
-## Summary
-
-Copy all 7 v1 Python files from the project root into `cyrus2/` and apply Ruff autofix + formatting. This is a mechanical copy-and-format step — no logic changes. The result is a clean, consistently styled starting point for the v2 rewrite.
-
-## Dependency
-
-**Blocked by Issue 001** (state: PLANNED). `cyrus2/pyproject.toml` must exist with the Ruff config before `ruff check` and `ruff format` can discover their settings. The builder must verify `cyrus2/pyproject.toml` exists before proceeding — if it doesn't, the build cannot continue.
+**Issue**: [002-Run-ruff-autofix-and-format](/home/daniel/Projects/barf/cyrus/issues/002-Run-ruff-autofix-and-format.md)
+**Created**: 2026-03-16
+**PROMPT**: PROMPT_plan (planning phase)
 
 ## Gap Analysis
 
-| Requirement | Current State | Action |
-|---|---|---|
-| All 7 v1 .py files in `cyrus2/` | `cyrus2/` exists but is empty | Copy files |
-| `ruff check --fix .` applied | No ruff run yet | Run autofix |
-| `ruff format .` applied | No formatting yet | Run formatter |
-| `ruff check .` reports zero violations | N/A | Verify + manually fix remainders |
-| `ruff format --check .` confirms formatted | N/A | Verify |
-| Git diff shows only formatting changes | N/A | Review diff |
+**Already exists**:
+- `cyrus2/` directory (empty)
+- All 7 v1 Python files at project root: `main.py`, `cyrus_voice.py`, `cyrus_brain.py`, `cyrus_server.py`, `cyrus_hook.py`, `probe_uia.py`, `test_permission_scan.py`
+- Ruff configuration spec in `docs/17-ruff-linting.md`
+
+**Needs building**:
+- `cyrus2/pyproject.toml` — **BLOCKER**: Issue 001 (state: PLANNED) must complete first. Builder must verify this file exists before proceeding; if missing, build cannot continue.
+- Copy all 7 .py files into `cyrus2/`
+- Install ruff (not currently on system PATH)
+- Run `ruff check --fix .` on `cyrus2/`
+- Run `ruff format .` on `cyrus2/`
+- Resolve any remaining non-autofixable violations
+- Verify zero violations and all files formatted
+
+## Approach
+
+**Mechanical copy + lint/format — no logic changes.**
+
+1. Copy all 7 v1 Python files into `cyrus2/` (flat copy, no restructuring — subsequent issues handle refactoring)
+2. Run `ruff check --fix .` first (import sorting, unused imports, syntax modernization) — order matters because import changes affect line lengths
+3. Run `ruff format .` second (whitespace, indentation, line wrapping to 88 chars)
+4. Fix remaining violations manually or suppress with `# noqa` if fixing would alter logic
+5. If >20 E501 violations remain after formatting, add `"E501"` to the ignore list in `pyproject.toml` (ruff's own recommendation when using `ruff format`)
+
+**Why this order**: `ruff check --fix` handles semantic fixes (imports, pyupgrade) that can change line lengths. Formatting comes last so it operates on final line content.
+
+**Why no logic changes**: Acceptance criterion AC6 requires git diff shows only formatting/import-ordering changes. The selected rule sets (E, F, W, I, UP, B) produce only style changes, but UP rules on conditional imports could theoretically alter behavior — skip those with `# noqa` if detected.
+
+## Rules to Follow
+
+- No `.claude/rules/` directory exists in this project
+- Follow ruff configuration from `docs/17-ruff-linting.md`: rule sets E, F, W, I, UP, B; target-version py310; line-length 88
+- No logic changes — formatting and import ordering only (per issue AC6)
+
+## Skills & Agents to Use
+
+| Task | Skill/Agent | Purpose |
+|------|-------------|---------|
+| Copy files, run ruff, verify | Bash commands | Core mechanical work — cp, ruff check, ruff format |
+| Fix non-autofixable violations | `python-pro` subagent | Manual line-length fixes, string extraction, regex refactoring |
+| Review diff for logic changes | `code-reviewer` subagent | Verify git diff contains only formatting changes (AC6) |
+
+## Prioritized Tasks
+
+- [ ] **Verify prerequisite**: Check `cyrus2/pyproject.toml` exists (Issue 001 complete). If missing, STOP — build is blocked.
+- [ ] **Install ruff**: `pip install ruff` (or confirm already available via `ruff --version`)
+- [ ] **Copy v1 files**: Copy all 7 .py files from project root to `cyrus2/`
+- [ ] **Verify copy**: `ls cyrus2/*.py` — expect exactly 7 files
+- [ ] **Run autofix**: `cd cyrus2 && ruff check --fix .` — capture output, review for logic-altering fixes
+- [ ] **Run formatter**: `ruff format .` — capture output showing reformatted file count
+- [ ] **Check remaining violations**: `ruff check .` — if zero, skip to verification
+- [ ] **Fix remaining violations manually**: E501 (extract long strings, split f-strings, multi-line regex). If >20 remain, add E501 to pyproject.toml ignore list
+- [ ] **Final verification**: `ruff check .` exits 0; `ruff format --check .` exits 0
+- [ ] **Review diff**: `git diff cyrus2/` — confirm only formatting/import-ordering changes, no logic changes
+
+## Acceptance-Driven Tests
+
+| Acceptance Criterion | Verification Command | Type |
+|---------------------|---------------------|------|
+| AC1: All v1 .py files copied to `cyrus2/` | `ls cyrus2/*.py` — expect 7 files matching source names | shell verification |
+| AC2: `ruff check --fix .` applied | Command runs successfully; output shows fixes applied | shell verification |
+| AC3: `ruff format .` applied | Command runs successfully; output shows files reformatted | shell verification |
+| AC4: `ruff check .` reports zero violations | Exit code 0, output "All checks passed" | shell verification |
+| AC5: `ruff format --check .` confirms formatted | Exit code 0, all files already formatted | shell verification |
+| AC6: Git diff shows only formatting changes | `git diff cyrus2/` — manual review for logic changes (none expected) | manual review |
+
+**No cheating** — cannot claim done without all 6 acceptance criteria verified.
+
+## Validation (Backpressure)
+
+- **Lint**: `ruff check .` in `cyrus2/` must exit 0 with zero violations
+- **Format**: `ruff format --check .` in `cyrus2/` must exit 0
+- **Diff review**: `git diff cyrus2/` must show only formatting/import-ordering changes
+- **File count**: Exactly 7 .py files in `cyrus2/`
+
+## Files to Create/Modify
+
+- `cyrus2/main.py` — copy from root, apply ruff autofix + format
+- `cyrus2/cyrus_voice.py` — copy from root, apply ruff autofix + format
+- `cyrus2/cyrus_brain.py` — copy from root, apply ruff autofix + format (~35 long lines may need manual fixing)
+- `cyrus2/cyrus_server.py` — copy from root, apply ruff autofix + format
+- `cyrus2/cyrus_hook.py` — copy from root, apply ruff autofix + format
+- `cyrus2/probe_uia.py` — copy from root, apply ruff autofix + format
+- `cyrus2/test_permission_scan.py` — copy from root, apply ruff autofix + format
+- `cyrus2/pyproject.toml` — may need E501 added to ignore list if >20 violations remain (conditional)
 
 ## Design Decisions
 
 1. **Copy order doesn't matter** — all 7 files are independent modules with no cross-imports within `cyrus2/`. A single `cp` batch suffices.
 
-2. **Ruff autofix before format** — `ruff check --fix` handles import sorting (I), unused imports (F401), pyupgrade (UP), and bugbear (B) fixes first. Then `ruff format` handles whitespace/line-length. This order is intentional: import changes can affect line lengths, so formatting comes last.
+2. **E501 (line length) strategy** — Based on code audit (`docs/12-code-audit.md`), `cyrus_brain.py` has ~35 long lines (regex patterns, f-strings) and `main.py` has ~30 long lines. `ruff format` will reflow most; truly unsplittable tokens (long strings, regex, URLs) may remain. Threshold: manually fix if ≤20, add ignore rule if >20.
 
-3. **E501 (line length) strategy** — The configured rule set includes `E` which contains E501. `ruff format` will reflow most long lines automatically (like Black). However, truly unsplittable tokens (long strings, regex patterns, URLs) may remain over 88 chars. Based on a scan of the v1 code:
-   - `cyrus_brain.py` has ~35 long lines (regex patterns, f-strings)
-   - `main.py` has ~30 long lines (complex f-strings, comments)
-   - Other files have 0–3 long lines each
+3. **No logic changes** — If ruff's autofix suggests a change that alters logic (e.g., UP rules on conditional imports), skip that fix with `# noqa: XXXX` and a comment explaining why.
 
-   **Approach**: After `ruff format`, run `ruff check .` and manually fix any remaining E501 violations by:
-   - Extracting long strings into variables
-   - Splitting f-strings across lines with parenthesized expressions
-   - Wrapping long regex patterns with `re.compile()` multi-line strings
-
-   If the count is large (>20 remaining), add `"E501"` to the `ignore` list in `pyproject.toml` with a comment explaining the formatter handles line length (this is ruff's own recommendation when using `ruff format`), and create a follow-up issue for manual line-length cleanup.
-
-4. **No logic changes** — the acceptance criterion "git diff shows only formatting/import-ordering changes" means we must not alter any runtime behavior. If ruff's autofix suggests a change that alters logic (unlikely with the selected rule sets, but possible with UP rules on conditional imports), we skip that fix with a `# noqa` comment.
-
-5. **Ruff installation** — ruff must be available. The builder should check `ruff --version` and install via `pip install ruff` if missing. This is a dev tool, not a runtime dependency.
-
-## Acceptance Criteria → Test Mapping
-
-| # | Acceptance Criterion | Verification Command |
-|---|---|---|
-| AC1 | All v1 .py files copied to `cyrus2/` | `ls cyrus2/*.py` — expect 7 files matching source names |
-| AC2 | `ruff check --fix .` applied | Run the command; captured output shows fixes applied |
-| AC3 | `ruff format .` applied | Run the command; captured output shows files reformatted |
-| AC4 | `ruff check .` reports zero violations | Exit code 0, output "All checks passed" |
-| AC5 | `ruff format --check .` confirms formatted | Exit code 0, output shows all files already formatted |
-| AC6 | Git diff shows only formatting changes | `git diff cyrus2/` — review for logic changes (none expected) |
-
-## Implementation Steps
-
-### Step 1: Verify prerequisite (Issue 001)
-
-```bash
-cd /home/daniel/Projects/barf/cyrus
-test -f cyrus2/pyproject.toml && echo "OK: pyproject.toml exists" || echo "BLOCKED: pyproject.toml missing"
-```
-
-If missing, the build cannot proceed — fail with a clear message.
-
-### Step 2: Ensure ruff is available
-
-```bash
-ruff --version || pip install ruff
-```
-
-### Step 3: Copy all v1 Python files to `cyrus2/`
-
-```bash
-cp main.py cyrus2/
-cp cyrus_voice.py cyrus2/
-cp cyrus_brain.py cyrus2/
-cp cyrus_server.py cyrus2/
-cp cyrus_hook.py cyrus2/
-cp probe_uia.py cyrus2/
-cp test_permission_scan.py cyrus2/
-```
-
-**Verify:** `ls -la cyrus2/*.py` — expect exactly 7 files.
-
-### Step 4: Run `ruff check --fix` on `cyrus2/`
-
-```bash
-cd /home/daniel/Projects/barf/cyrus/cyrus2
-ruff check --fix .
-```
-
-Capture output. Expected fix categories:
-- **I001**: import sorting/grouping
-- **F401**: unused imports removed
-- **UP**: syntax modernized (e.g., `dict()` → `{}`, old-style type hints)
-- **W**: whitespace warnings
-
-Review output to confirm no logic-altering fixes.
-
-### Step 5: Run `ruff format` on `cyrus2/`
-
-```bash
-ruff format .
-```
-
-Capture output — shows count of reformatted files.
-
-### Step 6: Check for remaining violations
-
-```bash
-ruff check .
-```
-
-**If zero violations** → proceed to Step 8.
-
-**If violations remain** → go to Step 7.
-
-### Step 7: Resolve remaining violations
-
-For each violation class:
-
-- **E501 (line too long)**: Manually shorten lines by extracting variables, splitting strings, or using parenthesized line continuation. If >20 E501 violations remain after formatting, add `ignore = ["E501"]` to `[tool.ruff.lint]` in `pyproject.toml` (per ruff's recommendation when using ruff format) and note this in the commit message.
-- **Other non-autofixable**: Fix manually. If a fix would change logic, add `# noqa: XXXX` with a comment explaining why.
-
-Re-run `ruff check .` after each fix pass until zero violations.
-
-### Step 8: Final verification
-
-```bash
-# All checks pass
-ruff check .
-
-# All files formatted
-ruff format --check .
-
-# Review diff for logic changes (should be formatting/import-ordering only)
-cd /home/daniel/Projects/barf/cyrus
-git diff cyrus2/ | head -200
-```
-
-Visually confirm the diff contains only:
-- Import reordering
-- Whitespace/indentation changes
-- Line wrapping
-- Syntax modernization (UP rules — still not logic changes)
+4. **Ruff installation** — Dev tool, not a runtime dependency. `pip install ruff` if not available.
 
 ## Risk Assessment
 
-**Low-medium risk.** The copy step is trivial. The ruff autofix + format step is mechanical. The main risk is non-autofixable E501 violations in `cyrus_brain.py` and `main.py` (~65 long lines combined), which may require manual intervention or an E501 ignore rule. No logic changes should result from the selected rule sets (E, F, W, I, UP, B).
+**Low-medium risk.** The copy step is trivial. The ruff autofix + format step is mechanical. The main risk is:
+- **Blocker**: Issue 001 not yet complete (pyproject.toml missing) — builder must check and fail fast
+- **E501 violations**: ~65 long lines combined in `cyrus_brain.py` and `main.py` may need manual intervention or ignore rule
+- **No logic changes**: Selected rule sets (E, F, W, I, UP, B) should produce only style changes, but UP rules need careful review
 
 ## Estimated Scope
 

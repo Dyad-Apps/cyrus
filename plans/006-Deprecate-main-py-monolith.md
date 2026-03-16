@@ -1,104 +1,75 @@
-# Plan 006: Deprecate main.py monolith
+# Implementation Plan: Deprecate main.py monolith
 
-## Goal
+**Issue**: [006-Deprecate-main-py-monolith](/home/daniel/Projects/barf/cyrus/issues/006-Deprecate-main-py-monolith.md)
+**Created**: 2026-03-16
+**PROMPT**: `prompts/PROMPT_plan.md`
 
-Reduce `main.py` from a 1,755-line monolith to a ~25-line thin wrapper that prints a deprecation warning and delegates to `cyrus_brain.main()`. The split architecture (brain + voice as separate processes) becomes the only recommended mode.
+## Gap Analysis
 
-## Prerequisites
+**Already exists**:
+- `cyrus_brain.py` — fully functional brain service with `async def main() -> None` (line 1696) and its own `__main__` block (line 1767) using `asyncio.run(main())`
+- `cyrus_voice.py` — fully functional voice service (all voice/TTS/VAD code duplicated from main.py)
+- `README.md` — already documents split mode as primary architecture (Quick Start only references brain + voice)
+- Split architecture is operational — brain on port 8766, voice connects to it
 
-- **Issue 005** (Extract shared code into cyrus_common.py) must be COMPLETE.
-  - After 005: `cyrus_common.py` exists with shared code, `main.py` is ~900–1,000 lines, `cyrus_brain.py` is ~700–850 lines.
-- This plan assumes 005 is done. All steps reference the post-005 state.
+**Needs building**:
+- Replace `main.py` (currently 1,756-line monolith) with ~25-line thin wrapper
+- Add deprecation warning printed on startup
+- Update `README.md`: add main.py to Project Structure (currently absent), add "Deprecated: Monolith Mode" section
+- Update `cyrus_brain.py` module docstring to mark it as PRIMARY ENTRY POINT
+- Create `tests/test_deprecation.py` with 6 acceptance tests
 
-## Key Findings from Gap Analysis
+**Blocker status — Issue 005**:
+The issue declares "Blocked By: Issue 005 (Extract shared code into cyrus_common.py)". Currently `cyrus_common.py` does NOT exist and `cyrus_brain.py` does NOT import from it. However, **this blocker is soft for Issue 006**: the thin wrapper only needs `from cyrus_brain import main as brain_main`, and `cyrus_brain.py` works independently right now. The builder should verify the import works in Step 1. If `cyrus_brain.py` has broken imports (due to partial Issue 005 work), that's the real blocker — not the absence of `cyrus_common.py` per se.
 
-### Path discrepancy
-The issue file references `cyrus2/` paths but the actual source files live at the project root (`/home/daniel/Projects/barf/cyrus/`). The `cyrus2/` directory is empty. This plan uses root-level paths matching the actual codebase.
+## Approach
 
-### What main.py contains after Issue 005
+**Complete replacement, not incremental gutting.** Replace the entire 1,756-line `main.py` with a ~25-line wrapper that:
+1. Prints a prominent deprecation warning via `print()` (consistent with project style — no logging yet per Issue 009/010)
+2. Imports and delegates to `cyrus_brain.main()` via `asyncio.run()`
+3. Handles `KeyboardInterrupt` for clean shutdown
 
-After 005 extracts shared code, main.py retains only monolith-specific code:
-- Audio/voice imports (~20 lines): numpy, sounddevice, torch, silero_vad, faster_whisper, pygame, keyboard
-- GPU detection and Whisper/VAD config constants (~40 lines)
-- `vad_loop()` — voice activity detection loop (~100 lines)
-- `transcribe()` — Whisper transcription (~20 lines)
-- TTS pipeline: `speak()`, `_speak_save()`, `_speak_kokoro()`, `_speak_edge()` (~90 lines)
-- `_execute_cyrus_command()` — command dispatch (~80 lines)
-- `startup_sequence()` — monolith greeting (~15 lines)
-- `main()` — monolith entry point with audio init, hotkeys, event loop (~280 lines)
-- Shutdown handling (~25 lines)
-- Shared state globals (~20 lines)
+**Why `print()` not `logging`**: The entire codebase uses `print()` throughout. Logging migration is Issue 009/010. Using `logging.getLogger().warning()` here would be the only file using logging, creating inconsistency.
 
-**All of this code already exists in `cyrus_voice.py` and `cyrus_brain.py`** (the split services). Nothing unique to main.py is being lost — the monolith simply bundled both services into one process.
+**Why full replacement**: Surgically removing functions is risky — easier to miss dead code. The old content is preserved in git history. Every function in the monolith already exists in `cyrus_voice.py` or `cyrus_brain.py`.
 
-### What cyrus_brain.py's main() does
+**Two deliberately-dropped functions**:
+- `_remote_route()` — experimental monolith-only WebSocket. Split architecture handles remote voice natively (`cyrus_voice.py --host <brain-ip>`)
+- `startup_sequence()` — monolith-specific greeting. Brain + voice each have their own startup messages
 
-`cyrus_brain.py:main()` (line 1696, `async def main() -> None`) starts:
-1. Session manager + window tracking
-2. VS Code submit worker thread
-3. Speak worker (forwards to voice service)
-4. Routing loop (processes utterances)
-5. TCP server on port 8766 (voice connections)
-6. TCP server on port 8767 (Claude Code hook connections)
-7. WebSocket server on port 8769 (mobile clients)
+## Rules to Follow
 
-Its own `__main__` block uses `asyncio.run(main())` with KeyboardInterrupt handling.
+No `.claude/rules/` directory exists in the cyrus project. Follow these project conventions instead:
+- **print() for output** — no logging module (project-wide pattern, logging is Issue 009/010)
+- **Google-style docstrings** — per `python-pro.md` agent spec
+- **Type hints on all functions** — `def main() -> None:`
+- **PEP 8 compliance** — enforced via ruff
+- **Static tests preferred** — runtime tests require audio hardware + Windows UIA, use AST/string analysis instead
 
-When `main.py` delegates to `brain_main()`, users get the brain service only. The deprecation message tells them to run `cyrus_voice.py` separately for audio. **This behavioral change is intentional** — the monolith mode is replaced by split mode.
+## Skills & Agents to Use
 
-### No imports of main.py from other files
+| Task | Skill/Agent | Purpose |
+|------|-------------|---------|
+| Implement wrapper + docstring changes | `python-pro` subagent | Senior Python dev, type-safe code, PEP 8 |
+| Validate refactoring | `code-reviewer` subagent | Post-implementation review if needed |
+| Lint/format | `ruff` (CLI tool) | `ruff check` + `ruff format` on changed files |
 
-Confirmed via grep: no file imports from `main.py`. It's a standalone entry point only.
+## Prioritized Tasks
 
-### README current state
+- [ ] **1. Verify prerequisite**: Confirm `from cyrus_brain import main` works (Python import check). If it fails, stop and report blocker.
+- [ ] **2. Replace main.py with thin wrapper**: Overwrite entire file with ~25-line deprecation wrapper that imports `brain_main` and calls `asyncio.run(brain_main())`
+- [ ] **3. Update cyrus_brain.py docstring**: Add "PRIMARY ENTRY POINT" and deprecation note for main.py to the module docstring
+- [ ] **4a. Update README — Project Structure**: Add `main.py — DEPRECATED monolith wrapper (delegates to cyrus_brain.py)` after the `cyrus_hook.py` line
+- [ ] **4b. Update README — Deprecated section**: Add "Deprecated: Monolith Mode" section after Project Structure with migration instructions
+- [ ] **5. Verify no critical code lost**: Confirm all main.py functions exist in cyrus_voice.py or cyrus_brain.py (grep check)
+- [ ] **6. Lint and format**: Run `ruff check` + `ruff format` on main.py and cyrus_brain.py
+- [ ] **7. Write tests**: Create `tests/test_deprecation.py` with 6 static acceptance tests
+- [ ] **8. Run tests**: Execute `python -m pytest tests/test_deprecation.py -v` — all 6 must pass
 
-The README (231 lines) already documents split mode as the primary architecture. The "Project Structure" section does NOT list `main.py` at all — it only shows `cyrus_voice.py`, `cyrus_brain.py`, `cyrus_hook.py`, `cyrus-companion/`, and support files. Step 4a must ADD an entry, not modify one.
+## Implementation Details
 
-## Design Decisions
+### Task 2: main.py thin wrapper
 
-### D1. Complete replacement, not incremental gutting
-
-Rather than surgically removing functions, replace the entire file content with the thin wrapper. This is cleaner and eliminates any risk of leaving dead code behind. The old content is preserved in git history.
-
-### D2. Deprecation via print(), not logging
-
-The project uses `print()` throughout — logging migration is Issue 009/010. Using `logging.getLogger().warning()` here would be inconsistent with every other file. Use `print()` with a prominent `⚠️` emoji banner, matching the existing output style. When Issue 010 replaces prints with logging, this warning migrates naturally.
-
-### D3. Return value passthrough
-
-`brain_main()` is `async def main() -> None` that runs `serve_forever()` (never returns normally). The wrapper calls it via `asyncio.run()` and propagates `KeyboardInterrupt` for clean shutdown, matching cyrus_brain.py's own `if __name__` block.
-
-### D4. README update scope
-
-The README already documents split mode as the primary architecture. Updates needed:
-- Add `main.py` entry to Project Structure (currently absent) and mark as deprecated
-- Add a "Deprecated: Monolith Mode" section after Project Structure
-- Quick Start already only references split mode — no changes needed there
-
-### D5. cyrus_brain.py comment update
-
-Add a one-line note to cyrus_brain.py's module docstring marking it as the primary entry point.
-
-## Implementation Steps
-
-### Step 1: Verify Issue 005 prerequisite
-
-Confirm `cyrus_common.py` exists and cyrus_brain.py imports from it:
-
-```bash
-test -f /home/daniel/Projects/barf/cyrus/cyrus_common.py && echo "OK: cyrus_common.py exists"
-grep -n "from cyrus_common import" /home/daniel/Projects/barf/cyrus/cyrus_brain.py && echo "OK: brain imports from common"
-```
-
-If either check fails, Issue 005 is not yet complete — stop and report the blocker.
-
-**Verification**: Both commands print "OK".
-
-### Step 2: Replace main.py with thin wrapper
-
-**File**: `/home/daniel/Projects/barf/cyrus/main.py`
-
-Replace the entire file with:
 ```python
 """
 Cyrus - All-in-one monolith mode (DEPRECATED)
@@ -137,64 +108,22 @@ if __name__ == "__main__":
         sys.exit(0)
 ```
 
-**Verification**:
-```bash
-python -m py_compile /home/daniel/Projects/barf/cyrus/main.py
-wc -l /home/daniel/Projects/barf/cyrus/main.py  # expected: ~25 lines
+### Task 3: cyrus_brain.py docstring change
+
+Change first line from:
 ```
-
-### Step 3: Update cyrus_brain.py module docstring
-
-**File**: `/home/daniel/Projects/barf/cyrus/cyrus_brain.py`
-
-Change the first line of the docstring from:
-```python
-"""
 cyrus_brain.py — Service 2: Logic / VS Code Watcher
 ```
-
 To:
-```python
-"""
+```
 cyrus_brain.py — Service 2: Logic / VS Code Watcher (PRIMARY ENTRY POINT)
 
 This is the recommended entry point for Cyrus. main.py is deprecated; use this directly.
 ```
 
-Leave the rest of the docstring intact.
+### Task 4b: README "Deprecated: Monolith Mode" section
 
-**Verification**:
-```bash
-python -m py_compile /home/daniel/Projects/barf/cyrus/cyrus_brain.py
-head -5 /home/daniel/Projects/barf/cyrus/cyrus_brain.py | grep -i "primary"
-```
-
-### Step 4: Update README.md
-
-**File**: `/home/daniel/Projects/barf/cyrus/README.md`
-
-**4a.** Add `main.py` to the "Project Structure" section and mark as deprecated.
-
-The current Project Structure block is:
-```
-cyrus_voice.py          — Voice service (mic/VAD/Whisper/TTS)
-cyrus_brain.py          — Brain service (routing/UIA/hooks/watchers)
-cyrus_hook.py           — Claude Code hook script (all 4 events)
-cyrus-companion/        — VS Code extension (submit text to Claude Code)
-requirements-voice.txt  — Voice service dependencies
-requirements-brain.txt  — Brain service dependencies
-install-voice.ps1/.sh   — Voice installer
-install-brain.ps1/.sh   — Brain installer
-build-release.ps1       — Packages both zips for distribution
-```
-
-Add after the `cyrus_hook.py` line:
-```
-main.py                 — DEPRECATED monolith wrapper (delegates to cyrus_brain.py)
-```
-
-**4b.** Add a "Deprecated: Monolith Mode" section after "Project Structure":
-
+Insert after Project Structure:
 ```markdown
 ## Deprecated: Monolith Mode
 
@@ -206,143 +135,62 @@ It now delegates to `cyrus_brain.py` and logs a deprecation warning on startup.
 **Use split mode instead** (documented in Quick Start above). If you previously
 ran `python main.py`, switch to:
 
-```bash
-python cyrus_brain.py &
-python cyrus_voice.py
-```
+    python cyrus_brain.py &
+    python cyrus_voice.py
 
 No configuration changes needed — split mode uses the same `.env` and hooks.
 ```
 
-**Verification**:
-```bash
-grep -c "deprecated" /home/daniel/Projects/barf/cyrus/README.md  # should be >= 1
-grep -c "Monolith Mode" /home/daniel/Projects/barf/cyrus/README.md  # should be 1
-```
+### Task 7: Test file — `tests/test_deprecation.py`
 
-### Step 5: Verify no critical code was lost
+6 static tests using AST parsing and string matching (no runtime execution needed):
 
-After replacing main.py, verify that every function from the old monolith exists elsewhere:
+| # | Test | Validates |
+|---|------|-----------|
+| 1 | `test_main_is_thin_wrapper` | main.py ≤ 30 lines |
+| 2 | `test_main_docstring_says_deprecated` | Module docstring contains "DEPRECATED" |
+| 3 | `test_main_imports_brain_main` | Contains `from cyrus_brain import main` |
+| 4 | `test_main_prints_deprecation_warning` | Contains "DEPRECATION" + references both services |
+| 5 | `test_readme_documents_deprecation` | README has "deprecated" + "Monolith Mode" |
+| 6 | `test_brain_docstring_marks_primary` | cyrus_brain.py docstring contains "PRIMARY" |
 
-```bash
-cd /home/daniel/Projects/barf/cyrus
+## Acceptance-Driven Tests
 
-# Voice functions exist in cyrus_voice.py:
-grep -n "^def vad_loop\|^def transcribe\|^async def speak\|^async def _speak" cyrus_voice.py
+| Acceptance Criterion | Required Test | Type |
+|---------------------|---------------|------|
+| `main.py` refactored to thin wrapper | `test_main_is_thin_wrapper` (≤30 lines) | unit (static) |
+| Deprecation warning logged on startup | `test_main_prints_deprecation_warning` | unit (static) |
+| All business logic removed from main.py | `test_main_is_thin_wrapper` (line count proves no logic) | unit (static) |
+| main.py imports and delegates to cyrus_brain.py | `test_main_imports_brain_main` | unit (static) |
+| Documentation updated: recommend split mode | `test_readme_documents_deprecation` | unit (static) |
+| Tests confirm wrapper forwards calls correctly | `test_main_imports_brain_main` + `test_main_prints_deprecation_warning` | unit (static) |
 
-# Brain functions exist in cyrus_brain.py or cyrus_common.py:
-grep -rn "^def _execute_cyrus_command\|^class SessionManager\|^class ChatWatcher\|^class PermissionWatcher" \
-  cyrus_brain.py cyrus_common.py
-```
+**No cheating** — cannot claim done without all 6 tests passing.
 
-Two main.py-only functions are deliberately dropped:
-- `_remote_route()` — experimental monolith-only feature for remote brain WebSocket. The split architecture handles remote voice natively (`python cyrus_voice.py --host <brain-ip>`).
-- `startup_sequence()` — monolith-specific greeting. Brain + voice each print their own startup messages.
+## Validation (Backpressure)
 
-### Step 6: Lint and format
+- **Tests**: `python -m pytest tests/test_deprecation.py -v` — all 6 pass
+- **Lint**: `ruff check main.py cyrus_brain.py` — no violations
+- **Format**: `ruff format --check main.py cyrus_brain.py` — already formatted
+- **Compile**: `python -m py_compile main.py` — no syntax errors
+- **Line count**: `wc -l main.py` — ≤ 30 lines
 
-```bash
-cd /home/daniel/Projects/barf/cyrus
-ruff check main.py cyrus_brain.py
-ruff format main.py cyrus_brain.py
-```
+## Files to Create/Modify
 
-Fix any violations.
-
-### Step 7: Write tests
-
-Create `/home/daniel/Projects/barf/cyrus/tests/test_deprecation.py` (create `tests/` directory if it does not exist):
-
-```python
-"""Tests for Issue 006: main.py deprecation warning."""
-
-import ast
-from pathlib import Path
-
-CYRUS_ROOT = Path(__file__).resolve().parent.parent
-
-
-def test_main_is_thin_wrapper():
-    """main.py must be <= 30 lines (thin wrapper, not a monolith)."""
-    lines = (CYRUS_ROOT / "main.py").read_text().splitlines()
-    assert len(lines) <= 30, (
-        f"main.py has {len(lines)} lines — expected <= 30 for a thin wrapper"
-    )
-
-
-def test_main_docstring_says_deprecated():
-    """main.py module docstring must contain 'DEPRECATED'."""
-    source = (CYRUS_ROOT / "main.py").read_text()
-    tree = ast.parse(source)
-    docstring = ast.get_docstring(tree) or ""
-    assert "DEPRECATED" in docstring.upper(), (
-        f"main.py module docstring must mention DEPRECATED, got: {docstring[:200]}"
-    )
-
-
-def test_main_imports_brain_main():
-    """main.py must import main from cyrus_brain."""
-    source = (CYRUS_ROOT / "main.py").read_text()
-    assert "from cyrus_brain import main" in source, (
-        "main.py must contain 'from cyrus_brain import main'"
-    )
-
-
-def test_main_prints_deprecation_warning():
-    """main.py main() must print a deprecation warning string."""
-    source = (CYRUS_ROOT / "main.py").read_text()
-    assert "DEPRECATION" in source, (
-        "main.py must contain a 'DEPRECATION' warning string"
-    )
-    assert "cyrus_brain" in source and "cyrus_voice" in source, (
-        "Deprecation warning must reference both cyrus_brain and cyrus_voice"
-    )
-
-
-def test_readme_documents_deprecation():
-    """README.md must document the main.py deprecation."""
-    readme = (CYRUS_ROOT / "README.md").read_text()
-    assert "deprecated" in readme.lower(), "README.md must mention deprecation"
-    assert "Monolith Mode" in readme, "README.md must have a 'Monolith Mode' section"
-
-
-def test_brain_docstring_marks_primary():
-    """cyrus_brain.py docstring must indicate it's the primary entry point."""
-    source = (CYRUS_ROOT / "cyrus_brain.py").read_text()
-    tree = ast.parse(source)
-    docstring = ast.get_docstring(tree) or ""
-    assert "PRIMARY" in docstring.upper(), (
-        "cyrus_brain.py module docstring must indicate PRIMARY entry point"
-    )
-```
-
-**Verification**:
-```bash
-cd /home/daniel/Projects/barf/cyrus
-python -m pytest tests/test_deprecation.py -v
-```
-
-All 6 tests should pass.
-
-## Acceptance Criteria Mapping
-
-| Criterion | Verified by |
-|-----------|-------------|
-| `main.py` refactored to be a thin wrapper | Step 2 (complete replacement), `test_main_is_thin_wrapper` |
-| Deprecation warning logged on startup | Step 2 (`print()` call), `test_main_prints_deprecation_warning` |
-| All business logic and state management removed from main.py | Step 2 (only import + wrapper remains) |
-| main.py imports and delegates to cyrus_brain.py functions | Step 2 (`from cyrus_brain import main as brain_main`), `test_main_imports_brain_main` |
-| Documentation updated: recommend split mode | Step 4 (README updated), `test_readme_documents_deprecation` |
-| Tests confirm wrapper forwards calls correctly | Step 7 (6 pytest tests), `test_main_imports_brain_main` |
+- **Modify**: `main.py` — replace 1,756-line monolith with ~25-line thin wrapper
+- **Modify**: `cyrus_brain.py` — update module docstring (first 2-3 lines only)
+- **Modify**: `README.md` — add main.py to Project Structure + add Deprecated section
+- **Create**: `tests/test_deprecation.py` — 6 acceptance tests
+- **Create**: `tests/` directory (if it doesn't exist)
 
 ## Risk Notes
 
-1. **Import side effects**: `from cyrus_brain import main as brain_main` will execute cyrus_brain.py's module-level code at import time, including the comtypes/uiautomation try/except block. This is acceptable — the same code runs when cyrus_brain.py is executed directly.
+1. **Import side effects**: `from cyrus_brain import main as brain_main` executes cyrus_brain.py's module-level code at import time (comtypes/uiautomation try/except). Acceptable — same code runs when executed directly.
 
-2. **_remote_route() loss**: The monolith had an experimental `--remote` flag for connecting to a remote brain via WebSocket. This feature is dropped. The split architecture is the correct way to run voice remotely (`python cyrus_voice.py --host <brain-ip>`). If remote routing is needed in the future, it should be built into the brain service (separate issue).
+2. **asyncio.run() nesting**: The wrapper calls `asyncio.run(brain_main())`. Safe because main.py is only run as a script, never imported. `asyncio.run()` is the standard pattern.
 
-3. **asyncio.run() nesting**: The wrapper calls `asyncio.run(brain_main())`. If main.py is ever imported (not run as `__main__`), `main()` would try to start a new event loop. This is fine — main.py is only meant to be run as a script, and `asyncio.run()` is the standard pattern.
+3. **Issue 005 not complete**: `cyrus_common.py` doesn't exist yet, but `cyrus_brain.py` works independently. The import `from cyrus_brain import main` should succeed. Builder must verify in Step 1.
 
-4. **Blocked by Issue 005**: This plan assumes cyrus_common.py exists and cyrus_brain.py imports from it. If 005 is not complete, Step 2 will fail at `from cyrus_brain import main` because cyrus_brain.py may have import-time errors (missing cyrus_common.py). The builder must verify the prerequisite in Step 1 before proceeding.
+4. **Tests are static only**: No runtime testing (would require audio hardware, Windows UIA, VS Code). Runtime verification is manual. Static tests validate file structure, content, and documentation.
 
-5. **Tests don't test runtime**: The pytest tests verify file structure and content statically (AST parsing, string matching). They do NOT attempt to actually run main.py, which would require audio hardware, Windows UIA, and VS Code. Runtime verification is manual (Step 2 verification commands).
+5. **Two functions deliberately dropped**: `_remote_route()` and `startup_sequence()` exist only in old main.py and are not migrated. Split architecture replaces their functionality.

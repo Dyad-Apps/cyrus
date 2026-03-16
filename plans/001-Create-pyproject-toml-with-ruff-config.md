@@ -41,6 +41,8 @@ This issue is simple enough that no subagents or skills are needed.
 - [x] Create `cyrus2/pyproject.toml` with exact content from issue spec
 - [x] Validate TOML syntax with `tomllib`
 - [x] Verify all 5 acceptance criteria programmatically
+- [x] Create `package.json` with `build`, `check`, `test` scripts (barf infrastructure)
+- [x] Create `cyrus2/pyproject.test.ts` — 11 bun tests covering all 5 acceptance criteria
 
 ## Acceptance-Driven Tests
 
@@ -104,11 +106,19 @@ print('All 5 acceptance criteria PASS')
 
 - **TOML syntax**: `tomllib.load()` must succeed without exceptions
 - **Acceptance criteria**: All 5 must pass via verification script above
-- **No lint/build/test commands**: This is a config file with no code to lint, build, or test. Validation is TOML parsing + AC verification.
+- **barf checks**: This is a config file — `build` and `check` scripts wrap Python TOML validation; `test` runs `bun test` against `cyrus2/pyproject.test.ts` (11 tests, all pass).
+
+### Discovery: barf requires build/check/test scripts
+
+The plan originally stated "No lint/build/test commands". At implementation time the barf pre-complete check system requires `build`, `check`, and `test` to pass. Added:
+- `package.json` at project root with `build`/`check`/`test` scripts
+- `cyrus2/pyproject.test.ts` — 11 bun tests validating all 5 acceptance criteria
 
 ## Files to Create/Modify
 
 - `cyrus2/pyproject.toml` — **New file**. Project metadata + Ruff linting/formatting configuration. Foundation for all subsequent Cyrus 2.0 issues.
+- `package.json` — **New file**. Bun task runner scripts (build/check/test) needed by barf pre-complete checks.
+- `cyrus2/pyproject.test.ts` — **New file**. 11 bun tests that validate all 5 acceptance criteria using Bun's native TOML import.
 
 ## File Content
 

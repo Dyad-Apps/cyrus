@@ -1,45 +1,72 @@
-# Plan 003: Create requirements-dev.txt
+# Implementation Plan: Create requirements-dev.txt
 
-## Summary
-
-Create `cyrus2/requirements-dev.txt` with development-only dependencies: pytest, pytest-asyncio, pytest-mock, ruff, and pytest-cov. These are the tools for automated testing and code quality — separated from production dependencies for clean deployments. No version pins (Issue 004 handles that separately).
+**Issue**: [003-Create-requirements-dev-txt](/home/daniel/Projects/barf/cyrus/issues/003-Create-requirements-dev-txt.md)
+**Created**: 2026-03-16
+**PROMPT**: `/home/daniel/Projects/barf/cyrus/prompts/PROMPT_plan.md`
 
 ## Gap Analysis
 
-| Requirement | Current State | Action |
-|---|---|---|
-| `cyrus2/requirements-dev.txt` exists | `cyrus2/` exists but is empty | Create file |
-| Contains pytest | Not present | Add line |
-| Contains pytest-asyncio | Not present | Add line |
-| Contains pytest-mock | Not present | Add line |
-| Contains ruff | Not present | Add line |
-| Contains pytest-cov (optional) | Not present | Add line — AC3 says "optional", but docs/14-test-suite.md and docs/17-ruff-linting.md both support including it. Include it. |
-| Installable via `pip install -r` | N/A | Verify syntax |
+**Already exists**: `cyrus2/` directory (empty). Root-level requirements files (`requirements.txt`, `requirements-brain.txt`, `requirements-voice.txt`) establish the pattern: bare package names, one per line, trailing newline, no version pins. Reference docs `docs/14-test-suite.md` and `docs/17-ruff-linting.md` both specify these dev dependencies.
 
-## Design Decisions
+**Needs building**: Single file `cyrus2/requirements-dev.txt` with 5 packages:
+- `pytest` — test runner
+- `pytest-asyncio` — async test support
+- `pytest-cov` — coverage reporting (AC3 marks optional; including it — standard practice, zero cost)
+- `pytest-mock` — mocking fixtures
+- `ruff` — linter and formatter
 
-1. **Include pytest-cov** — The acceptance criteria mark it as optional, but coverage reporting is standard practice and costs nothing to list. Including it now avoids a round-trip later.
+## Approach
 
-2. **No version pins** — Issue 004 explicitly handles pinning for both production and dev dependencies. Following the same pattern as the existing root-level `requirements.txt`, `requirements-brain.txt`, and `requirements-voice.txt` which list bare package names.
+**Write the file verbatim with the 5 packages in alphabetical order.** The issue and both reference docs (`docs/14-test-suite.md`, `docs/17-ruff-linting.md`) agree on the required packages. Alphabetical order keeps diffs clean and matches standard Python conventions.
 
-3. **One package per line, alphabetical order** — Matches the convention in existing requirements files. Alphabetical order makes diffs cleaner and avoids merge conflicts when adding packages.
+**Why include pytest-cov**: AC3 says "optional" but `docs/14-test-suite.md` references it implicitly (testing framework setup), coverage is standard practice, and listing it costs nothing. Including it now avoids a round-trip later.
 
-4. **Trailing newline** — Standard POSIX text file convention. All existing requirements files in the project end with a newline.
+**Why no version pins**: Issue 004 explicitly handles pinning for both production and dev dependencies. The existing root-level requirements files all use bare package names — follow the same pattern.
 
-## Acceptance Criteria → Test Mapping
+**Why alphabetical order**: Makes diffs cleaner and avoids merge conflicts when adding packages. All 5 packages have `pytest-*` or `ruff` as names, so alphabetical grouping is natural.
 
-| # | Acceptance Criterion | Verification |
-|---|---|---|
-| AC1 | File `cyrus2/requirements-dev.txt` exists | `test -f cyrus2/requirements-dev.txt` |
-| AC2 | Contains pytest, pytest-asyncio, pytest-mock, ruff | Read file → assert all 4 packages present |
-| AC3 | Optional: add pytest-cov | Read file → assert pytest-cov present |
-| AC4 | Installable with `pip install -r` | `pip install --dry-run -r cyrus2/requirements-dev.txt` (dry-run avoids side effects) |
+## Rules to Follow
 
-## Implementation Steps
+- No `.claude/rules/` directory exists in this project — no rule files to reference.
 
-### Step 1: Create `cyrus2/requirements-dev.txt`
+## Skills & Agents to Use
 
-Write the file with this exact content (alphabetical, one per line):
+| Task | Skill/Agent | Purpose |
+|------|-------------|---------|
+| Create requirements-dev.txt | Direct file write | Single file, fully specified content — no agent needed |
+| Verify file content | `python3` validation script | Programmatically check all packages present and ordered |
+| Verify pip installability | `pip install --dry-run` | Confirm pip can parse the file without errors |
+
+This issue is simple enough that no subagents or skills are needed.
+
+## Prioritized Tasks
+
+- [ ] Create `cyrus2/requirements-dev.txt` with exact content (5 packages, alphabetical, trailing newline)
+- [ ] Verify file exists and content matches expected packages
+- [ ] Verify pip can parse the file (dry-run install)
+
+## Acceptance-Driven Tests
+
+| Acceptance Criterion | Required Test | Type |
+|---------------------|---------------|------|
+| AC1: File `cyrus2/requirements-dev.txt` exists | `test -f cyrus2/requirements-dev.txt` | verification |
+| AC2: Contains pytest, pytest-asyncio, pytest-mock, ruff | Read file → assert all 4 packages present | verification |
+| AC3: Optional: add pytest-cov | Read file → assert pytest-cov present | verification |
+| AC4: Installable with `pip install -r` | `pip install --dry-run -r cyrus2/requirements-dev.txt` succeeds | verification |
+
+**No cheating** — cannot claim done without all 4 verifications passing.
+
+## Validation (Backpressure)
+
+- **Content check**: Python script reads file, asserts exact package list `['pytest', 'pytest-asyncio', 'pytest-cov', 'pytest-mock', 'ruff']` in alphabetical order
+- **Pip check**: `pip install --dry-run -r cyrus2/requirements-dev.txt` resolves all packages without errors
+- **No lint/build**: This is a plain text file — no linting or build step applies
+
+## Files to Create/Modify
+
+- `cyrus2/requirements-dev.txt` (new file) — 5 packages, one per line, alphabetical, trailing newline
+
+## Exact File Content
 
 ```
 pytest
@@ -49,51 +76,6 @@ pytest-mock
 ruff
 ```
 
-**File path:** `cyrus2/requirements-dev.txt`
-
-### Step 2: Verify file exists and content is correct
-
-```bash
-cd /home/daniel/Projects/barf/cyrus
-test -f cyrus2/requirements-dev.txt && echo "OK: file exists" || echo "FAIL: file missing"
-```
-
-```bash
-python3 -c "
-import sys
-
-with open('cyrus2/requirements-dev.txt') as f:
-    packages = [line.strip() for line in f if line.strip()]
-
-expected = ['pytest', 'pytest-asyncio', 'pytest-cov', 'pytest-mock', 'ruff']
-errors = []
-
-for pkg in expected:
-    if pkg not in packages:
-        errors.append(f'missing: {pkg}')
-
-for pkg in packages:
-    if pkg not in expected:
-        errors.append(f'unexpected: {pkg}')
-
-if packages != expected:
-    errors.append(f'order wrong: got {packages}, expected {expected}')
-
-if errors:
-    print('FAIL:', errors)
-    sys.exit(1)
-print('All acceptance criteria pass')
-"
-```
-
-### Step 3: Verify pip can parse the file
-
-```bash
-pip install --dry-run -r cyrus2/requirements-dev.txt 2>&1 | head -20
-```
-
-Expect: pip resolves all packages without errors. The `--dry-run` flag prevents actual installation.
-
 ## Risk Assessment
 
-**Minimal risk.** This is a single new file with 5 lines of text. No code changes, no imports, no runtime impact. The only failure mode is a typo in a package name, caught by Step 3's dry-run verification.
+**Minimal risk.** Single new file with 5 lines of text. No code changes, no imports, no runtime impact. Only failure mode is a typo in a package name, caught by the dry-run verification step.
