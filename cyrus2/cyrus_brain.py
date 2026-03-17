@@ -95,17 +95,18 @@ from cyrus_common import (
     clean_for_speech,
     register_chime_handlers,
 )
+from cyrus_config import BRAIN_PORT, HOOK_PORT, MOBILE_PORT
 from cyrus_log import setup_logging
 
 # ── Module logger ──────────────────────────────────────────────────────────────
 log = logging.getLogger("cyrus.brain")
 
 # ── Configuration ──────────────────────────────────────────────────────────────
+# Port constants are imported from cyrus_config so they can be overridden via
+# CYRUS_BRAIN_PORT, CYRUS_HOOK_PORT, and CYRUS_MOBILE_PORT environment variables.
 
 BRAIN_HOST = "0.0.0.0"
-BRAIN_PORT = 8766
-HOOK_PORT = 8767  # Claude Code Stop hook sends here
-MOBILE_PORT = 8769  # WebSocket endpoint for mobile clients
+# BRAIN_PORT, HOOK_PORT, MOBILE_PORT imported from cyrus_config above
 
 # ── Shared state ───────────────────────────────────────────────────────────────
 

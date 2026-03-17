@@ -1,18 +1,18 @@
 ---
 id=010-Replace-prints-in-cyrus-brain-3
 title=Convert 19 existing logging.xyz() root-logger calls to named log.xyz() in cyrus_brain.py
-state=PLANNED
+state=COMPLETE
 parent=010-Replace-prints-in-cyrus-brain
 children=
 split_count=0
 force_split=false
 needs_interview=false
 verify_count=0
-total_input_tokens=97737
-total_output_tokens=30
-total_duration_seconds=245
-total_iterations=2
-run_count=2
+total_input_tokens=159101
+total_output_tokens=64
+total_duration_seconds=438
+total_iterations=4
+run_count=3
 ---
 
 # Convert 19 existing logging.xyz() root-logger calls to named log.xyz() in cyrus_brain.py
@@ -39,12 +39,12 @@ Nineteen existing `logging.xyz()` calls (using the root logger) were added to `c
 - 010-Replace-prints-in-cyrus-brain-2 — complete print replacement first to avoid conflicts
 
 ## Acceptance Criteria
-- [ ] All `logging.debug(...)`, `logging.info(...)`, `logging.warning(...)`, `logging.error(...)`, `logging.exception(...)` calls in `cyrus2/cyrus_brain.py` replaced with `log.*()` equivalents
-- [ ] `grep -c "logging\.\(debug\|info\|warning\|error\|exception\)" cyrus2/cyrus_brain.py` → 0
-- [ ] No changes to message content or arguments (these already use `%s` formatting)
-- [ ] `ruff check cyrus2/cyrus_brain.py` passes with no errors
-- [ ] `ruff format --check cyrus2/cyrus_brain.py` passes
-- [ ] Existing tests still pass: `python -m pytest cyrus2/tests/ -v`
+- [x] All `logging.debug(...)`, `logging.info(...)`, `logging.warning(...)`, `logging.error(...)`, `logging.exception(...)` calls in `cyrus2/cyrus_brain.py` replaced with `log.*()` equivalents
+- [x] `grep -c "logging\.\(debug\|info\|warning\|error\|exception\)" cyrus2/cyrus_brain.py` → 0
+- [x] No changes to message content or arguments (these already use `%s` formatting)
+- [x] `ruff check cyrus2/cyrus_brain.py` passes with no errors
+- [x] `ruff format --check cyrus2/cyrus_brain.py` passes
+- [x] Existing tests still pass: `python -m pytest cyrus2/tests/ -v`
 
 ## Implementation Steps
 1. Search for all root-logger calls in `cyrus2/cyrus_brain.py` (approximately lines 309-472):
@@ -105,3 +105,14 @@ python -m pytest cyrus2/tests/ -v
 - **Context used:** 19%
 - **Model:** claude-opus-4-6
 - **Trigger:** auto/plan
+
+### COMPLETE — 2026-03-17 19:45:05Z
+
+- **From:** COMPLETE
+- **Duration in stage:** 193s
+- **Input tokens:** 61,364 (final context: 28,357)
+- **Output tokens:** 34
+- **Iterations:** 2
+- **Context used:** 14%
+- **Model:** claude-sonnet-4-6
+- **Trigger:** auto/build

@@ -40,6 +40,7 @@ try:
 except ImportError:
     raise SystemExit("websockets not installed — run: pip install websockets") from None
 
+from cyrus2.cyrus_config import SERVER_PORT
 from cyrus2.cyrus_log import setup_logging
 
 log = logging.getLogger("cyrus.server")
@@ -202,7 +203,8 @@ def main() -> None:
         "--host", default="0.0.0.0", help="Interface to bind (default: 0.0.0.0)"
     )
     parser.add_argument(
-        "--port", type=int, default=8765, help="Port to listen on (default: 8765)"
+        "--port", type=int, default=SERVER_PORT,
+        help="Port to listen on (default: 8765)",
     )
     args = parser.parse_args()
     asyncio.run(_serve(args.host, args.port))

@@ -15,11 +15,11 @@
 
 ## Verification Steps
 
-- [ ] `grep -c "logging\.\(debug\|info\|warning\|error\|exception\)" cyrus2/cyrus_brain.py` → 0
-- [ ] `cyrus2/.venv/bin/python -m ruff check cyrus2/cyrus_brain.py` passes
-- [ ] `cyrus2/.venv/bin/python -m ruff format --check cyrus2/cyrus_brain.py` passes
-- [ ] `cyrus2/.venv/bin/python -m pytest cyrus2/tests/test_010_print_replacement.py::TestNoRootLoggerCalls -v` passes
-- [ ] `cyrus2/.venv/bin/python -m pytest cyrus2/tests/ -v` — full suite passes
+- [x] `grep -c "logging\.\(debug\|info\|warning\|error\|exception\)" cyrus2/cyrus_brain.py` → 0
+- [x] `cyrus2/.venv/bin/python -m ruff check cyrus2/cyrus_brain.py` passes
+- [x] `cyrus2/.venv/bin/python -m ruff format --check cyrus2/cyrus_brain.py` passes
+- [x] `cyrus2/.venv/bin/python -m pytest cyrus2/tests/test_010_print_replacement.py::TestNoRootLoggerCalls -v` passes
+- [x] `cyrus2/.venv/bin/python -m pytest cyrus2/tests/ -v` — full suite passes (648 passed)
 
 ## Minor Fixes Needed
 
@@ -34,6 +34,6 @@ Mark issue complete after running verification steps. All acceptance criteria ar
 | All `logging.xyz()` replaced with `log.xyz()` | ✅ | grep returns 0 matches |
 | `grep -c` returns 0 | ✅ | Confirmed via ripgrep search |
 | No changes to message content/arguments | ✅ | Messages use `%s`-style formatting as-is |
-| `ruff check` passes | ⏳ | Run verification step |
-| `ruff format --check` passes | ⏳ | Run verification step |
-| Existing tests pass | ⏳ | Run verification step |
+| `ruff check` passes | ✅ | All checks passed |
+| `ruff format --check` passes | ✅ | 1 file already formatted |
+| Existing tests pass | ✅ | 648 passed, 25 subtests passed |

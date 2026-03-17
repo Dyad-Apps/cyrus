@@ -36,6 +36,12 @@ import numpy as np
 import pygame
 import sounddevice as sd
 import torch
+from cyrus2.cyrus_config import (
+    BRAIN_PORT,
+    SILENCE_WINDOW,
+    SPEECH_THRESHOLD,
+    TTS_TIMEOUT,
+)
 from cyrus2.cyrus_log import setup_logging
 from faster_whisper import WhisperModel
 from silero_vad import load_silero_vad
@@ -48,6 +54,10 @@ _CUDA = torch.cuda.is_available()
 _GPU_NAME = torch.cuda.get_device_name(0) if _CUDA else "none"
 
 # ── Configuration ──────────────────────────────────────────────────────────────
+# Port and VAD constants are imported from cyrus_config so they can be overridden
+# via CYRUS_BRAIN_PORT, CYRUS_SPEECH_THRESHOLD, CYRUS_SILENCE_WINDOW, and
+# CYRUS_TTS_TIMEOUT environment variables.
+# BRAIN_PORT, SPEECH_THRESHOLD, SILENCE_WINDOW, TTS_TIMEOUT imported above.
 
 WHISPER_MODEL = "medium.en"
 WHISPER_DEVICE = "cuda" if _CUDA else "cpu"
@@ -61,17 +71,17 @@ TTS_VOICE = "af_heart"
 TTS_SPEED = 1.0
 
 BRAIN_HOST = "localhost"
-BRAIN_PORT = 8766
+# BRAIN_PORT imported from cyrus_config
 
 KEY_PAUSE = "f9"
 KEY_STOP = "f7"
 KEY_READ_CLIP = "f8"
 
-SPEECH_THRESHOLD = 0.5
+# SPEECH_THRESHOLD imported from cyrus_config
 FRAME_MS = 32
 FRAME_SIZE = 512
 SPEECH_WINDOW_MS = 300
-SILENCE_WINDOW_MS = 1000
+SILENCE_WINDOW_MS = SILENCE_WINDOW  # SILENCE_WINDOW imported from cyrus_config
 MAX_RECORD_MS = 12000
 
 SPEECH_RING = SPEECH_WINDOW_MS // FRAME_MS
@@ -181,7 +191,7 @@ async def speak(text: str) -> None:
     _mic_muted.set()
     await _send({"type": "tts_start"})
     try:
-        await asyncio.wait_for(_speak_save(text), timeout=25.0)
+        await asyncio.wait_for(_speak_save(text), timeout=TTS_TIMEOUT)
     except asyncio.TimeoutError:
         log.warning("TTS timed out")
         _stop_speech.set()

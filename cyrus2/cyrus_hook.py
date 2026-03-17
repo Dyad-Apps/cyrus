@@ -8,11 +8,25 @@ Never raises — a crashing hook blocks Claude Code.
 """
 
 import json
+import os
 import socket
 import sys
 
+# Ensure cyrus_config (in the same directory as this script) is importable
+# regardless of the working directory Claude Code uses when invoking hooks.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+# HOOK_PORT is imported from cyrus_config so it can be overridden via
+# the CYRUS_HOOK_PORT environment variable without modifying this file.
+try:
+    from cyrus_config import HOOK_PORT as BRAIN_PORT
+except (ImportError, ValueError):
+    # Fallback if cyrus_config is unavailable or misconfigured — never block Claude
+    BRAIN_PORT = 8767
+
 BRAIN_HOST = "localhost"
-BRAIN_PORT = 8767
 
 
 def _send(msg: dict) -> None:

@@ -1,18 +1,18 @@
 ---
 id=010-Replace-prints-in-cyrus-brain-4
 title=Write acceptance tests for cyrus_brain.py logging migration and verify full suite
-state=PLANNED
+state=BUILT
 parent=010-Replace-prints-in-cyrus-brain
-children=
+children=047,048,049,050,051,052,053,054,055,056,057,058,059,060,061,062,063
 split_count=0
 force_split=false
 needs_interview=false
-verify_count=0
-total_input_tokens=125792
-total_output_tokens=34
-total_duration_seconds=278
-total_iterations=2
-run_count=2
+verify_count=1
+total_input_tokens=153866
+total_output_tokens=43
+total_duration_seconds=360
+total_iterations=3
+run_count=3
 ---
 
 # Write acceptance tests for cyrus_brain.py logging migration and verify full suite
@@ -38,20 +38,20 @@ Write `cyrus2/tests/test_010_print_replacement.py` containing AST-based static a
 - 010-Replace-prints-in-cyrus-brain-3 — all conversions must be done before testing
 
 ## Acceptance Criteria
-- [ ] `cyrus2/tests/test_010_print_replacement.py` created
-- [ ] `test_no_print_calls_remain` — AST/grep: zero `print(` calls in cyrus_brain.py
-- [ ] `test_setup_logging_import_exists` — AST: `from cyrus2.cyrus_log import setup_logging` present
-- [ ] `test_logging_import_exists` — AST: `import logging` present
-- [ ] `test_named_logger_defined` — source contains `logging.getLogger("cyrus.brain")`
-- [ ] `test_setup_logging_called_in_main` — AST: `setup_logging("cyrus")` call present in `main()` body
-- [ ] `test_no_brain_prefix_in_source` — no `[Brain]` string in log call arguments
-- [ ] `test_no_error_prefix_in_source` — no `[!]` string in log call arguments
-- [ ] `test_no_root_logger_calls` — zero `logging.debug/info/warning/error/exception(` in file
-- [ ] `test_no_fstrings_in_log_calls` — AST walk: log.xyz() args contain no JoinedStr (f-string) nodes
-- [ ] `test_except_blocks_use_exc_info` — AST: log calls inside except blocks have `exc_info=True` kwarg
-- [ ] `test_module_imports_cleanly` — import cyrus_brain without errors (mock Windows-only deps)
-- [ ] All tests pass: `python -m pytest cyrus2/tests/test_010_print_replacement.py -v`
-- [ ] Full suite passes: `python -m pytest cyrus2/tests/ -v`
+- [x] `cyrus2/tests/test_010_print_replacement.py` created
+- [x] `test_no_print_calls_remain` — AST/grep: zero `print(` calls in cyrus_brain.py
+- [x] `test_setup_logging_import_exists` — AST: `from cyrus2.cyrus_log import setup_logging` present
+- [x] `test_logging_import_exists` — AST: `import logging` present
+- [x] `test_named_logger_defined` — source contains `logging.getLogger("cyrus.brain")`
+- [x] `test_setup_logging_called_in_main` — AST: `setup_logging("cyrus")` call present in `main()` body
+- [x] `test_no_brain_prefix_in_source` — no `[Brain]` string in log call arguments
+- [x] `test_no_error_prefix_in_source` — no `[!]` string in log call arguments
+- [x] `test_no_root_logger_calls` — zero `logging.debug/info/warning/error/exception(` in file
+- [x] `test_no_fstrings_in_log_calls` — AST walk: log.xyz() args contain no JoinedStr (f-string) nodes
+- [x] `test_except_blocks_use_exc_info` — AST: log calls inside except blocks have `exc_info=True` kwarg
+- [x] `test_module_imports_cleanly` — import cyrus_brain without errors (mock Windows-only deps)
+- [x] All tests pass: `python -m pytest cyrus2/tests/test_010_print_replacement.py -v`
+- [x] Full suite passes: `python -m pytest cyrus2/tests/ -v`
 
 ## Implementation Steps
 1. Study `cyrus2/tests/test_007.py` and `test_008.py` to understand the unittest + AST patterns used
@@ -105,3 +105,14 @@ grep -c "logging\.\(debug\|info\|warning\|error\|exception\)" cyrus2/cyrus_brain
 - **Context used:** 33%
 - **Model:** claude-opus-4-6
 - **Trigger:** auto/plan
+
+### BUILT — 2026-03-17 19:46:27Z
+
+- **From:** BUILT
+- **Duration in stage:** 82s
+- **Input tokens:** 28,074 (final context: 28,074)
+- **Output tokens:** 9
+- **Iterations:** 1
+- **Context used:** 14%
+- **Model:** claude-sonnet-4-6
+- **Trigger:** auto/build

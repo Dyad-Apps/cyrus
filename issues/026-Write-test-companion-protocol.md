@@ -1,18 +1,18 @@
 ---
 id=026-Write-test-companion-protocol
 title=Issue 026: Write test_companion_protocol.py (Tier 4)
-state=PLANNED
+state=STUCK
 parent=
 children=
 split_count=0
 force_split=false
 needs_interview=false
-verify_count=0
-total_input_tokens=117327
-total_output_tokens=34
-total_duration_seconds=506
-total_iterations=69
-run_count=69
+verify_count=1
+total_input_tokens=170578
+total_output_tokens=59
+total_duration_seconds=647
+total_iterations=70
+run_count=70
 ---
 
 # Issue 026: Write test_companion_protocol.py (Tier 4)
@@ -36,12 +36,12 @@ Tier 4 integration tests for IPC (Inter-Process Communication) companion protoco
 - Issue 018 (conftest.py fixtures)
 
 ## Acceptance Criteria
-- [ ] `cyrus2/tests/test_companion_protocol.py` exists with 8+ test cases
-- [ ] Tests verify message encoding to JSON lines (~2 cases): dict→JSON with newline
-- [ ] Tests verify message decoding from JSON lines (~2 cases): JSON→dict parsing
-- [ ] Tests verify socket communication (~2 cases): send/receive with mock sockets
-- [ ] Tests verify protocol error handling (~2 cases): malformed JSON, connection loss, timeout
-- [ ] All tests pass: `pytest tests/test_companion_protocol.py -v`
+- [x] `cyrus2/tests/test_companion_protocol.py` exists with 8+ test cases
+- [x] Tests verify message encoding to JSON lines (~2 cases): dict→JSON with newline
+- [x] Tests verify message decoding from JSON lines (~2 cases): JSON→dict parsing
+- [x] Tests verify socket communication (~2 cases): send/receive with mock sockets
+- [x] Tests verify protocol error handling (~2 cases): malformed JSON, connection loss, timeout
+- [x] All tests pass: `pytest tests/test_companion_protocol.py -v`
 
 ## Implementation Steps
 1. Create `cyrus2/tests/test_companion_protocol.py`
@@ -787,5 +787,18 @@ pytest cyrus2/tests/test_companion_protocol.py -k "error or malformed" -v
 - **Input tokens:** 0 (final context: 0)
 - **Output tokens:** 0
 - **Iterations:** 1
+- **Model:** claude-sonnet-4-6
+- **Trigger:** auto/build
+
+<!-- root-cause:065 -->
+
+### STUCK — 2026-03-17 19:48:49Z
+
+- **From:** STUCK
+- **Duration in stage:** 141s
+- **Input tokens:** 53,251 (final context: 53,251)
+- **Output tokens:** 25
+- **Iterations:** 1
+- **Context used:** 27%
 - **Model:** claude-sonnet-4-6
 - **Trigger:** auto/build
