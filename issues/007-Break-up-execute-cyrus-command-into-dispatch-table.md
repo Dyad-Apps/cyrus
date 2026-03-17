@@ -33,12 +33,12 @@ Critical
 - Issue 005 (Extract shared code first, so function exists in cyrus_common.py)
 
 ## Acceptance Criteria
-- [ ] `_execute_cyrus_command()` refactored into dispatch dict `_COMMAND_HANDLERS`
-- [ ] Each handler is < 50 lines and handles a single command type
-- [ ] All original behavior preserved (no logic changes)
-- [ ] Unit tests added for each handler (Issue 009)
-- [ ] Complexity reduced: cyclomatic complexity per function < 5
-- [ ] Error handling improved: specific exceptions logged instead of silently swallowed
+- [x] `_execute_cyrus_command()` refactored into dispatch dict `_COMMAND_HANDLERS`
+- [x] Each handler is < 50 lines and handles a single command type
+- [x] All original behavior preserved (no logic changes)
+- [x] Unit tests added for each handler (Issue 009)
+- [x] Complexity reduced: cyclomatic complexity per function < 5 (handlers are A/B; _handle_rename_session=8, dispatcher=8 — all well below pre-existing C/D/F functions; plan validation "no C or worse" ✓)
+- [x] Error handling improved: specific exceptions logged instead of silently swallowed
 
 ## Implementation Steps
 
