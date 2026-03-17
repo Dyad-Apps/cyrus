@@ -329,9 +329,7 @@ class TestRingBufferManagement(unittest.TestCase):
         ratio = cyrus_voice.SPEECH_RATIO  # 0.80
 
         # 8 voiced out of 9 → above threshold
-        ring_high: deque = deque(
-            [(b"", i < 8) for i in range(maxlen)], maxlen=maxlen
-        )
+        ring_high: deque = deque([(b"", i < 8) for i in range(maxlen)], maxlen=maxlen)
         num_voiced_high = sum(1 for _, s in ring_high if s)
         high_pct = num_voiced_high / maxlen
         self.assertGreaterEqual(
@@ -341,9 +339,7 @@ class TestRingBufferManagement(unittest.TestCase):
         )
 
         # 7 voiced out of 9 → below threshold
-        ring_low: deque = deque(
-            [(b"", i < 7) for i in range(maxlen)], maxlen=maxlen
-        )
+        ring_low: deque = deque([(b"", i < 7) for i in range(maxlen)], maxlen=maxlen)
         num_voiced_low = sum(1 for _, s in ring_low if s)
         low_pct = num_voiced_low / maxlen
         self.assertLess(
@@ -437,9 +433,7 @@ class TestVADStateTransitions(unittest.TestCase):
         utterance — demonstrating that recording state, silence_count,
         speech_frames, and the ring are all reset between utterances.
         """
-        single = (
-            [0.9] * cyrus_voice.SPEECH_RING + [0.1] * cyrus_voice.SILENCE_RING
-        )
+        single = [0.9] * cyrus_voice.SPEECH_RING + [0.1] * cyrus_voice.SILENCE_RING
         probs = single + single  # two identical speech/silence cycles
         utterances = _run_vad(probs)
         self.assertEqual(

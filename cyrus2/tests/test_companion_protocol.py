@@ -20,7 +20,7 @@ import socket
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -48,12 +48,10 @@ _CYRUS2_DIR = Path(__file__).parent.parent
 if str(_CYRUS2_DIR) not in sys.path:
     sys.path.insert(0, str(_CYRUS2_DIR))
 
-import cyrus_brain  # noqa: E402
 from cyrus_brain import (  # noqa: E402
     _open_companion_connection,
     _submit_via_extension,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -75,6 +73,9 @@ def mock_socket() -> MagicMock:
         A MagicMock configured to mimic a connected TCP socket.
     """
     sock = MagicMock(spec=socket.socket)
+    # Ensure `with sock as s:` returns the same object (not a new MagicMock)
+    sock.__enter__ = MagicMock(return_value=sock)
+    sock.__exit__ = MagicMock(return_value=False)
     sock.send.return_value = 100
     # Default recv: valid JSON line (companion confirms success)
     sock.recv.return_value = b'{"ok": true}\n'
@@ -173,7 +174,7 @@ class TestMessageDecoding:
         the remainder with the terminating newline.
         """
         # Two-chunk response: split across recv calls
-        mock_socket.recv.side_effect = [b'{"ok":', b' true}\n']
+        mock_socket.recv.side_effect = [b'{"ok":', b" true}\n"]
 
         with (
             patch("cyrus_brain._open_companion_connection", return_value=mock_socket),
@@ -194,9 +195,7 @@ class TestMessageDecoding:
 class TestSocketCommunication:
     """Verify that send/receive integration works correctly through mock sockets."""
 
-    def test_sendall_called_with_json_line_bytes(
-        self, mock_socket: MagicMock
-    ) -> None:
+    def test_sendall_called_with_json_line_bytes(self, mock_socket: MagicMock) -> None:
         """``_submit_via_extension`` must call ``sendall`` with the JSON-encoded text.
 
         Verifies that:
@@ -221,7 +220,8 @@ class TestSocketCommunication:
     def test_successful_extension_response_returns_true(
         self, mock_socket: MagicMock
     ) -> None:
-        """A ``{"ok": true}`` response must cause ``_submit_via_extension`` to return True."""
+        """A ``{"ok": true}`` response must cause ``_submit_via_extension`` to
+        return True."""
         mock_socket.recv.return_value = b'{"ok": true}\n'
 
         with (
@@ -236,7 +236,8 @@ class TestSocketCommunication:
     def test_extension_error_response_returns_false(
         self, mock_socket: MagicMock
     ) -> None:
-        """An ``{"ok": false}`` response must cause ``_submit_via_extension`` to return False."""
+        """An ``{"ok": false}`` response must cause ``_submit_via_extension``
+        to return False."""
         mock_socket.recv.return_value = b'{"ok": false, "error": "not ready"}\n'
 
         with (
@@ -343,7 +344,7 @@ class TestProtocolErrorHandling:
         Network calls may time out; ``_submit_via_extension`` must not propagate
         the exception to its caller.
         """
-        mock_socket.recv.side_effect = socket.timeout("timed out")
+        mock_socket.recv.side_effect = TimeoutError("timed out")
 
         with (
             patch("cyrus_brain._open_companion_connection", return_value=mock_socket),
@@ -363,7 +364,9 @@ class TestProtocolErrorHandling:
 class TestOpenCompanionConnection:
     """Verify the socket-opening helper connects to the right path / port."""
 
-    @pytest.mark.skipif(os.name == "nt", reason="Unix socket path test — skip on Windows")
+    @pytest.mark.skipif(
+        os.name == "nt", reason="Unix socket path test — skip on Windows"
+    )
     def test_unix_socket_path_uses_tmp_dir(self) -> None:
         """On non-Windows the socket path must be in the temp directory.
 
@@ -372,7 +375,9 @@ class TestOpenCompanionConnection:
         with that path.
         """
         safe = "myproject"
-        expected_path = os.path.join(tempfile.gettempdir(), f"cyrus-companion-{safe}.sock")
+        expected_path = os.path.join(
+            tempfile.gettempdir(), f"cyrus-companion-{safe}.sock"
+        )
 
         fake_sock = MagicMock(spec=socket.socket)
         fake_sock.__enter__ = lambda s: s

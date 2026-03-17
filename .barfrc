@@ -27,7 +27,7 @@ BARF_DIR=.barf
 PROMPT_DIR=prompts
 LOG_FILE=.barf/barf.jsonl
 LOG_LEVEL=trace
-LOG_PRETTY=false
+LOG_PRETTY=true
 
 BUILD_COMMAND=cyrus2/.venv/bin/python -m ruff check cyrus2/
 CHECK_COMMAND=cyrus2/.venv/bin/python -m ruff format --check cyrus2/

@@ -33,7 +33,6 @@ from cyrus_common import (  # noqa: E402
     _resolve_project,
 )
 
-
 # ── test_extract_project ──────────────────────────────────────────────────────
 
 
@@ -96,7 +95,8 @@ class TestExtractProject:
 
     def test_extract_project_project_name_with_dots(self) -> None:
         """Dotted project names like org.example.app are returned intact."""
-        assert _extract_project("org.example.app - Visual Studio Code") == "org.example.app"
+        result = _extract_project("org.example.app - Visual Studio Code")
+        assert result == "org.example.app"
 
 
 # ── test_make_alias ───────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
-"""Acceptance-driven tests for Issue 016: Fix file handle leak in _open_companion_connection.
+"""Acceptance-driven tests for Issue 016: Fix file handle leak in
+_open_companion_connection.
 
 Tests verify every acceptance criterion from the issue:
   - File handle wrapped in `with` statement
@@ -214,7 +215,8 @@ class TestFileNotFoundHandling(unittest.TestCase):
                             self.assertIn(
                                 fake_port_path,
                                 args_str,
-                                f"Expected port file path '{fake_port_path}' in log.error args",
+                                f"Expected port file path '{fake_port_path}'"
+                                " in log.error args",
                             )
 
 
@@ -226,9 +228,7 @@ class TestValueErrorHandling(unittest.TestCase):
 
     def test_invalid_port_content_propagates_value_error(self):
         """AC: ValueError re-raised when port file contains non-integer content."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".port", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".port", delete=False) as tmp:
             tmp.write("not_a_number\n")
             tmp_path = tmp.name
 
@@ -243,9 +243,7 @@ class TestValueErrorHandling(unittest.TestCase):
 
     def test_invalid_port_logged_as_error(self):
         """AC: log.error() called when port file content is invalid."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".port", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".port", delete=False) as tmp:
             tmp.write("garbage_port\n")
             tmp_path = tmp.name
 
@@ -264,9 +262,7 @@ class TestValueErrorHandling(unittest.TestCase):
 
     def test_invalid_port_message_includes_port_file_path(self):
         """AC: Diagnostic log message for invalid port includes the file path."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".port", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".port", delete=False) as tmp:
             tmp.write("invalid\n")
             tmp_path = tmp.name
 
@@ -287,16 +283,15 @@ class TestValueErrorHandling(unittest.TestCase):
                             self.assertIn(
                                 tmp_path,
                                 args_str,
-                                f"Expected port file path '{tmp_path}' in log.error args",
+                                f"Expected port file path '{tmp_path}'"
+                                " in log.error args",
                             )
         finally:
             os.unlink(tmp_path)
 
     def test_empty_port_file_raises_value_error(self):
         """Edge case: empty port file should raise ValueError (int('') fails)."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".port", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".port", delete=False) as tmp:
             tmp.write("")
             tmp_path = tmp.name
 
@@ -311,9 +306,7 @@ class TestValueErrorHandling(unittest.TestCase):
 
     def test_float_port_content_raises_value_error(self):
         """Edge case: float string like '8766.5' is not a valid int port."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".port", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".port", delete=False) as tmp:
             tmp.write("8766.5\n")
             tmp_path = tmp.name
 
@@ -331,10 +324,12 @@ class TestValueErrorHandling(unittest.TestCase):
 
 
 class TestFileHandleAlwaysCloses(unittest.TestCase):
-    """AC: File handle __exit__ called even when ValueError or FileNotFoundError raised."""
+    """AC: File handle __exit__ called even when ValueError or
+    FileNotFoundError raised."""
 
     def test_file_handle_closed_on_value_error(self):
-        """AC: Context manager __exit__ invoked when ValueError raised inside with block."""
+        """AC: Context manager __exit__ invoked when ValueError raised inside
+        with block."""
         mock_file = MagicMock()
         # Make int() conversion fail by returning non-numeric content from read()
         mock_file.__enter__ = MagicMock(return_value=mock_file)
@@ -357,7 +352,8 @@ class TestFileHandleAlwaysCloses(unittest.TestCase):
         self.assertIs(
             args[0],
             ValueError,
-            "ValueError should have been passed to __exit__ for context manager cleanup",
+            "ValueError should have been passed to __exit__ for context"
+            " manager cleanup",
         )
 
     def test_file_handle_closed_on_success(self):
@@ -390,9 +386,7 @@ class TestPortFileReadingFunctionality(unittest.TestCase):
 
     def test_valid_port_number_read_and_used(self):
         """AC: Valid port file with '8766' leads to connect('127.0.0.1', 8766)."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".port", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".port", delete=False) as tmp:
             tmp.write("8766\n")
             tmp_path = tmp.name
 
@@ -416,9 +410,7 @@ class TestPortFileReadingFunctionality(unittest.TestCase):
 
     def test_valid_port_with_whitespace_stripped(self):
         """AC: Port value with surrounding whitespace/newline is correctly parsed."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".port", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".port", delete=False) as tmp:
             tmp.write("  9000  \n")
             tmp_path = tmp.name
 
@@ -438,7 +430,8 @@ class TestPortFileReadingFunctionality(unittest.TestCase):
         mock_sock.connect.assert_called_once_with(("127.0.0.1", 9000))
 
     def test_unix_path_uses_af_unix_socket(self):
-        """AC: On non-Windows (os.name != 'nt'), AF_UNIX socket is used (no file read)."""
+        """AC: On non-Windows (os.name != 'nt'), AF_UNIX socket is used
+        (no file read)."""
         mock_socket_cls = MagicMock()
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
@@ -455,9 +448,7 @@ class TestPortFileReadingFunctionality(unittest.TestCase):
 
     def test_socket_timeout_set_to_10(self):
         """AC: Socket timeout preserved at 10 seconds."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".port", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".port", delete=False) as tmp:
             tmp.write("8766\n")
             tmp_path = tmp.name
 
@@ -495,7 +486,8 @@ class TestExceptionHandlingStructure(unittest.TestCase):
         return None
 
     def _find_except_types_in_function(self, func_node: ast.FunctionDef) -> list[str]:
-        """Return all exception type names caught in except clauses within the function."""
+        """Return all exception type names caught in except clauses within the
+        function."""
         caught = []
         for node in ast.walk(func_node):
             if isinstance(node, ast.ExceptHandler):
@@ -517,7 +509,8 @@ class TestExceptionHandlingStructure(unittest.TestCase):
         self.assertIn(
             "FileNotFoundError",
             caught,
-            "FileNotFoundError not found in except handlers of _open_companion_connection",
+            "FileNotFoundError not found in except handlers of"
+            " _open_companion_connection",
         )
 
     def test_value_error_caught_in_function(self):
@@ -548,7 +541,8 @@ class TestExceptionHandlingStructure(unittest.TestCase):
         self.assertGreaterEqual(
             raise_count,
             2,
-            f"Expected at least 2 bare 'raise' statements in except handlers, found {raise_count}",
+            f"Expected at least 2 bare 'raise' statements in except handlers,"
+            f" found {raise_count}",
         )
 
 

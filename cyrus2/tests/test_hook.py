@@ -32,7 +32,6 @@ if str(_CYRUS2_DIR) not in sys.path:
 
 from cyrus_hook import main  # noqa: E402
 
-
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
@@ -85,7 +84,9 @@ class TestStopEvent:
             {"event": "stop", "text": "Task complete.", "cwd": "/home/user/project"}
         )
 
-    def test_stop_event_with_extra_fields_still_dispatches(self, mock_send: MagicMock) -> None:
+    def test_stop_event_with_extra_fields_still_dispatches(
+        self, mock_send: MagicMock
+    ) -> None:
         """Stop event with extra unrecognised fields is dispatched correctly.
 
         Extra fields like session_id or metadata should be silently ignored so
@@ -117,7 +118,9 @@ class TestStopEvent:
         _run_main(payload, mock_send)
         mock_send.assert_not_called()
 
-    def test_stop_event_missing_message_does_not_send(self, mock_send: MagicMock) -> None:
+    def test_stop_event_missing_message_does_not_send(
+        self, mock_send: MagicMock
+    ) -> None:
         """Stop event with no last_assistant_message key does not call _send."""
         payload = {
             "hook_event_name": "Stop",
@@ -207,8 +210,11 @@ class TestPreToolUseEvent:
             }
         )
 
-    def test_pre_tool_use_unknown_tool_sends_empty_command(self, mock_send: MagicMock) -> None:
-        """PreToolUse for an unrecognised tool still dispatches event with empty command.
+    def test_pre_tool_use_unknown_tool_sends_empty_command(
+        self, mock_send: MagicMock
+    ) -> None:
+        """PreToolUse for an unrecognised tool still dispatches event with
+        empty command.
 
         All tool use events are forwarded so Cyrus can announce what Claude is
         doing; the command field is simply empty for unknown tools.
@@ -238,7 +244,9 @@ class TestPreToolUseEvent:
 class TestPostToolUseEvent:
     """Tests for PostToolUse hook event dispatch to _send()."""
 
-    def test_post_tool_use_bash_failure_sends_payload(self, mock_send: MagicMock) -> None:
+    def test_post_tool_use_bash_failure_sends_payload(
+        self, mock_send: MagicMock
+    ) -> None:
         """PostToolUse for Bash with non-zero exit_code dispatches post_tool event."""
         payload = {
             "hook_event_name": "PostToolUse",
@@ -259,7 +267,9 @@ class TestPostToolUseEvent:
             }
         )
 
-    def test_post_tool_use_bash_success_does_not_send(self, mock_send: MagicMock) -> None:
+    def test_post_tool_use_bash_success_does_not_send(
+        self, mock_send: MagicMock
+    ) -> None:
         """PostToolUse for Bash with exit_code 0 and no error does not call _send.
 
         Successful Bash commands are not announced — only failures are worth
@@ -287,7 +297,10 @@ class TestPostToolUseEvent:
             "hook_event_name": "PostToolUse",
             "tool_name": "Bash",
             "tool_input": {"command": "make"},
-            "tool_response": {"exit_code": 0, "stderr": "warning: implicit declaration"},
+            "tool_response": {
+                "exit_code": 0,
+                "stderr": "warning: implicit declaration",
+            },
             "cwd": "/home/user",
         }
         _run_main(payload, mock_send)
@@ -296,7 +309,9 @@ class TestPostToolUseEvent:
         assert sent["event"] == "post_tool"
         assert sent["error"] == "warning: implicit declaration"
 
-    def test_post_tool_use_bash_error_truncated_to_200(self, mock_send: MagicMock) -> None:
+    def test_post_tool_use_bash_error_truncated_to_200(
+        self, mock_send: MagicMock
+    ) -> None:
         """PostToolUse Bash error messages longer than 200 chars are truncated.
 
         Truncation keeps IPC messages small and avoids flooding Cyrus Brain
@@ -382,7 +397,9 @@ class TestNotificationEvent:
             }
         )
 
-    def test_notification_empty_message_does_not_send(self, mock_send: MagicMock) -> None:
+    def test_notification_empty_message_does_not_send(
+        self, mock_send: MagicMock
+    ) -> None:
         """Notification with empty string message does not call _send."""
         payload = {
             "hook_event_name": "Notification",
@@ -392,7 +409,9 @@ class TestNotificationEvent:
         _run_main(payload, mock_send)
         mock_send.assert_not_called()
 
-    def test_notification_whitespace_message_does_not_send(self, mock_send: MagicMock) -> None:
+    def test_notification_whitespace_message_does_not_send(
+        self, mock_send: MagicMock
+    ) -> None:
         """Notification with whitespace-only message does not call _send.
 
         strip() is applied before the truthiness check, so a message that is
@@ -428,7 +447,8 @@ class TestPreCompactEvent:
         )
 
     def test_pre_compact_manual_trigger(self, mock_send: MagicMock) -> None:
-        """PreCompact with 'manual' trigger dispatches pre_compact with correct trigger."""
+        """PreCompact with 'manual' trigger dispatches pre_compact with correct
+        trigger."""
         payload = {
             "hook_event_name": "PreCompact",
             "trigger": "manual",
@@ -493,7 +513,8 @@ class TestErrorHandling:
 
     def test_partial_json_truncated_exits_cleanly(self, mock_send: MagicMock) -> None:
         """Truncated JSON (partial payload) causes sys.exit(0) without calling _send."""
-        exit_code = _run_main_raw('{"hook_event_name": "Stop", "last_assistant_messa', mock_send)
+        truncated = '{"hook_event_name": "Stop", "last_assistant_messa'
+        exit_code = _run_main_raw(truncated, mock_send)
         assert exit_code == 0
         mock_send.assert_not_called()
 
@@ -510,7 +531,10 @@ class TestErrorHandling:
             "cwd": "/tmp",
         }
         json_str = json.dumps(payload)
-        with patch("cyrus_hook._send", mock_send), patch("sys.stdin", StringIO(json_str)):
+        with (
+            patch("cyrus_hook._send", mock_send),
+            patch("sys.stdin", StringIO(json_str)),
+        ):
             with pytest.raises(SystemExit) as exc_info:
                 main()
         assert exc_info.value.code == 0

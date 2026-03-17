@@ -140,9 +140,7 @@ def test_allow_word_clears_pending(utterance: str) -> None:
     w = _primed_watcher()
     with patch("cyrus_common._assert_vscode_focus"):
         w.handle_response(utterance)
-    assert not w._pending, (
-        f"_pending must be False after allow utterance {utterance!r}"
-    )
+    assert not w._pending, f"_pending must be False after allow utterance {utterance!r}"
 
 
 # ── DENY_WORDS: verify every word in the set is recognised ────────────────────
@@ -212,9 +210,7 @@ def test_deny_word_clears_pending(utterance: str) -> None:
     w = _primed_watcher()
     with patch("cyrus_common._assert_vscode_focus"):
         w.handle_response(utterance)
-    assert not w._pending, (
-        f"_pending must be False after deny utterance {utterance!r}"
-    )
+    assert not w._pending, f"_pending must be False after deny utterance {utterance!r}"
 
 
 # ── Case-insensitive matching ─────────────────────────────────────────────────
@@ -269,9 +265,7 @@ def test_mixed_case_keywords_are_recognised(utterance: str) -> None:
     w = _primed_watcher()
     with patch("cyrus_common._assert_vscode_focus"):
         result = w.handle_response(utterance)
-    assert result is True, (
-        f"Mixed-case utterance {utterance!r} must be recognised"
-    )
+    assert result is True, f"Mixed-case utterance {utterance!r} must be recognised"
 
 
 # ── Edge cases ────────────────────────────────────────────────────────────────
@@ -324,9 +318,7 @@ def test_no_pending_returns_false_regardless_of_keywords() -> None:
     # _pending defaults to False — no dialog is waiting
     with patch("cyrus_common._assert_vscode_focus"):
         result = w.handle_response("yes")
-    assert result is False, (
-        "handle_response must return False when _pending is False"
-    )
+    assert result is False, "handle_response must return False when _pending is False"
 
 
 def test_mixed_allow_and_deny_keywords_prefers_allow() -> None:

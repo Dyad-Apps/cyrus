@@ -36,7 +36,6 @@ from cyrus_common import (  # noqa: E402
     clean_for_speech,
 )
 
-
 # ── test_clean_for_speech ─────────────────────────────────────────────────────
 
 
@@ -183,14 +182,14 @@ class TestSanitizeForSpeech:
     @pytest.mark.parametrize(
         "input_char,expected_replacement",
         [
-            ("\u2014", ", "),   # em dash → ", "
-            ("\u2013", ", "),   # en dash → ", "
+            ("\u2014", ", "),  # em dash → ", "
+            ("\u2013", ", "),  # en dash → ", "
             ("\u2026", "..."),  # ellipsis → "..."
-            ("\u2018", "'"),    # left single quote → "'"
-            ("\u2019", "'"),    # right single quote → "'"
-            ("\u201c", '"'),    # left double quote → '"'
-            ("\u201d", '"'),    # right double quote → '"'
-            ("\u2022", ", "),   # bullet point → ", "
+            ("\u2018", "'"),  # left single quote → "'"
+            ("\u2019", "'"),  # right single quote → "'"
+            ("\u201c", '"'),  # left double quote → '"'
+            ("\u201d", '"'),  # right double quote → '"'
+            ("\u2022", ", "),  # bullet point → ", "
         ],
         ids=[
             "em_dash",
@@ -227,10 +226,10 @@ class TestSanitizeForSpeech:
         # String: He said "Hello"—nice to meet you…
         text = "He said\u201cHello\u201d\u2014nice to meet you\u2026"
         result = _sanitize_for_speech(text)
-        assert "\u201c" not in result   # left double quote gone
-        assert "\u201d" not in result   # right double quote gone
-        assert "\u2014" not in result   # em dash gone
-        assert "\u2026" not in result   # ellipsis gone
+        assert "\u201c" not in result  # left double quote gone
+        assert "\u201d" not in result  # right double quote gone
+        assert "\u2014" not in result  # em dash gone
+        assert "\u2026" not in result  # ellipsis gone
         # Core words preserved
         assert "Hello" in result
         assert "nice to meet you" in result
@@ -250,24 +249,36 @@ class TestStripFillers:
     @pytest.mark.parametrize(
         "filler_prefix",
         [
-            "um ",       # "um" + space
-            "uh ",       # "uh" + space
-            "uhh ",      # extended uh (uh+ regex: one or more h's)
-            "umm ",      # extended um (um+ regex: one or more m's)
-            "er ",       # "er" + space
-            "so ",       # "so" + space
-            "okay ",     # "okay" + space
-            "ok ",       # "ok" + space
-            "right ",    # "right" + space
-            "hey ",      # "hey" + space
-            "please ",   # "please" + space
+            "um ",  # "um" + space
+            "uh ",  # "uh" + space
+            "uhh ",  # extended uh (uh+ regex: one or more h's)
+            "umm ",  # extended um (um+ regex: one or more m's)
+            "er ",  # "er" + space
+            "so ",  # "so" + space
+            "okay ",  # "okay" + space
+            "ok ",  # "ok" + space
+            "right ",  # "right" + space
+            "hey ",  # "hey" + space
+            "please ",  # "please" + space
             "can you ",  # multi-word filler
-            "could you ", # multi-word filler
-            "would you ", # multi-word filler
+            "could you ",  # multi-word filler
+            "would you ",  # multi-word filler
         ],
         ids=[
-            "um", "uh", "uhh", "umm", "er", "so", "okay", "ok",
-            "right", "hey", "please", "can_you", "could_you", "would_you",
+            "um",
+            "uh",
+            "uhh",
+            "umm",
+            "er",
+            "so",
+            "okay",
+            "ok",
+            "right",
+            "hey",
+            "please",
+            "can_you",
+            "could_you",
+            "would_you",
         ],
     )
     def test_strip_fillers_removes_leading_filler(self, filler_prefix: str) -> None:
@@ -284,7 +295,8 @@ class TestStripFillers:
         assert _strip_fillers(text) == text
 
     def test_strip_fillers_stacked_fillers_all_removed(self) -> None:
-        """Multiple consecutive leading fillers are all stripped ('um uh okay X' → 'X')."""
+        """Multiple consecutive leading fillers are all stripped
+        ('um uh okay X' → 'X')."""
         result = _strip_fillers("um uh okay fix it")
         assert result == "fix it"
 

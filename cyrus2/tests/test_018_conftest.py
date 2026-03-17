@@ -62,12 +62,21 @@ class TestRequirementsDevTxt:
         """Read requirements-dev.txt lines, stripping comments and blanks."""
         assert _REQUIREMENTS_DEV.exists(), "requirements-dev.txt not found"
         lines = _REQUIREMENTS_DEV.read_text().splitlines()
-        return [line.strip() for line in lines if line.strip() and not line.startswith("#")]
+        return [
+            line.strip() for line in lines if line.strip() and not line.startswith("#")
+        ]
 
     def test_requirements_has_pytest_with_version(self) -> None:
         """requirements-dev.txt must include pytest with a version specifier (>=7.0)."""
         reqs = self._read_requirements()
-        pytest_lines = [r for r in reqs if r.startswith("pytest") and "asyncio" not in r and "mock" not in r and "cov" not in r]
+        pytest_lines = [
+            r
+            for r in reqs
+            if r.startswith("pytest")
+            and "asyncio" not in r
+            and "mock" not in r
+            and "cov" not in r
+        ]
         assert pytest_lines, "No pytest entry in requirements-dev.txt"
         line = pytest_lines[0]
         assert ">=" in line or "==" in line or "~=" in line, (
@@ -171,13 +180,21 @@ class TestMockLoggerFixture:
         """mock_logger must have a non-empty name for log filtering."""
         assert mock_logger.name, "mock_logger has no name"
 
-    def test_mock_logger_captures_messages(self, mock_logger: logging.Logger, caplog: pytest.LogCaptureFixture) -> None:
+    def test_mock_logger_captures_messages(
+        self,
+        mock_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         """Logging through mock_logger should be capturable via caplog."""
         with caplog.at_level(logging.DEBUG, logger=mock_logger.name):
             mock_logger.info("test message from mock_logger")
         assert "test message from mock_logger" in caplog.text
 
-    def test_mock_logger_can_log_at_all_levels(self, mock_logger: logging.Logger, caplog: pytest.LogCaptureFixture) -> None:
+    def test_mock_logger_can_log_at_all_levels(
+        self,
+        mock_logger: logging.Logger,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         """mock_logger must accept debug, info, warning, error, critical calls."""
         with caplog.at_level(logging.DEBUG, logger=mock_logger.name):
             mock_logger.debug("debug msg")
@@ -197,9 +214,7 @@ class TestMockConfigFixture:
 
     def test_mock_config_is_dict(self, mock_config: dict) -> None:
         """mock_config must be a dict."""
-        assert isinstance(mock_config, dict), (
-            f"Expected dict, got {type(mock_config)}"
-        )
+        assert isinstance(mock_config, dict), f"Expected dict, got {type(mock_config)}"
 
     def test_mock_config_has_required_keys(self, mock_config: dict) -> None:
         """mock_config must contain sensible default keys for cyrus."""
@@ -220,7 +235,8 @@ class TestMockConfigFixture:
         )
 
     def test_mock_config_is_mutable(self, mock_config: dict) -> None:
-        """Each test gets its own independent mock_config copy to avoid cross-test pollution."""
+        """Each test gets its own independent mock_config copy to avoid
+        cross-test pollution."""
         original_host = mock_config["host"]
         mock_config["host"] = "mutated-host"
         assert mock_config["host"] == "mutated-host"

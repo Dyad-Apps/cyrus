@@ -433,9 +433,7 @@ def _handle_rename_session(
         )
     else:
         text = spoken or "Could not find that session to rename."
-        log.warning(
-            "rename: no project match (proj=%r, new_name=%r)", proj, new_name
-        )
+        log.warning("rename: no project match (proj=%r, new_name=%r)", proj, new_name)
         return CommandResult(spoken=text, log_message=f"[Brain] {text}")
 
 
