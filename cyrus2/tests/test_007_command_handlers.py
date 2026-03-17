@@ -1,5 +1,6 @@
 """
-Acceptance-driven tests for Issue 007: Break up execute_cyrus_command into dispatch table.
+Acceptance-driven tests for Issue 007:
+Break up execute_cyrus_command into dispatch table.
 
 Tests verify every acceptance criterion from the issue:
   - _execute_cyrus_command() refactored into dispatch dict _COMMAND_HANDLERS
@@ -45,8 +46,8 @@ if str(_CYRUS2_DIR) not in sys.path:
 
 import cyrus_brain  # noqa: E402
 from cyrus_brain import (  # noqa: E402
-    CommandResult,
     _COMMAND_HANDLERS,
+    CommandResult,
     _execute_cyrus_command,
     _handle_last_message,
     _handle_pause,
@@ -158,7 +159,9 @@ class TestHandlerLineCounts(unittest.TestCase):
             if isinstance(node, ast.FunctionDef)
         }
         for name in self.handler_names:
-            self.assertIn(name, defined, f"Handler '{name}' not found in cyrus_brain.py")
+            self.assertIn(
+                name, defined, f"Handler '{name}' not found in cyrus_brain.py"
+            )
 
     def test_each_handler_under_50_lines(self):
         """AC: Each handler must be < 50 lines."""
@@ -212,7 +215,7 @@ class TestHandleSwitchProject(unittest.TestCase):
     """AC: switch_project handler preserves original behavior."""
 
     def test_switch_project_found_locks_to_target(self):
-        """switch_project found: result sets new_active_project + new_project_locked=True."""
+        """switch_project found: sets new_active_project + new_project_locked=True."""
         session_mgr = _make_session_mgr(aliases={"web": "web-proj"})
 
         with patch("cyrus_brain._resolve_project", return_value="web-proj"):
@@ -520,7 +523,7 @@ class TestHandleRenameSession(unittest.TestCase):
 
         with patch("cyrus_brain._resolve_project") as mock_resolve:
             # No old hint provided — should not call _resolve_project
-            result = _handle_rename_session(
+            _handle_rename_session(
                 cmd={"new": "frontend", "old": ""},
                 spoken="",
                 session_mgr=session_mgr,
@@ -542,7 +545,7 @@ class TestHandlePause(unittest.TestCase):
     def test_pause_returns_skip_tts_true(self):
         """pause: skip_tts must be True (voice service handles the response)."""
         loop = _make_loop()
-        with patch("asyncio.run_coroutine_threadsafe") as mock_rct:
+        with patch("asyncio.run_coroutine_threadsafe"):
             result = _handle_pause(
                 cmd={},
                 spoken="",
@@ -637,6 +640,7 @@ class TestDispatcher(unittest.TestCase):
 
     def test_dispatcher_handler_exception_is_caught(self):
         """Dispatcher must catch handler exceptions and not re-raise."""
+
         def bad_handler(*_args, **_kwargs):
             raise ValueError("simulated handler failure")
 
@@ -653,7 +657,8 @@ class TestDispatcher(unittest.TestCase):
                 self.fail(f"Dispatcher re-raised handler exception: {exc}")
 
     def test_dispatcher_handler_exception_is_logged(self):
-        """Dispatcher must log.exception for handler failures (AC: improved error handling)."""
+        """Dispatcher must log.exception for handler failures."""
+
         def bad_handler(*_args, **_kwargs):
             raise RuntimeError("test error")
 
@@ -692,9 +697,7 @@ class TestDispatcher(unittest.TestCase):
 
     def test_dispatcher_applies_new_project_locked(self):
         """Dispatcher must update _project_locked when handler returns new value."""
-        mock_handler = MagicMock(
-            return_value=CommandResult(new_project_locked=True)
-        )
+        mock_handler = MagicMock(return_value=CommandResult(new_project_locked=True))
         loop = _make_loop()
 
         with patch.dict("cyrus_brain._COMMAND_HANDLERS", {"lock_proj": mock_handler}):
@@ -744,13 +747,8 @@ class TestDispatcher(unittest.TestCase):
                     loop=loop,
                 )
 
-        # run_coroutine_threadsafe should NOT be called for TTS
-        # (handler is not pause, so no side-effect calls expected either)
-        tts_calls = [
-            c for c in mock_rct.call_args_list if "speak_queue" in str(c)
-        ]
-        # Verify it wasn't called with the speak_queue (check the mock directly)
-        # Since mock_handler doesn't call run_coroutine_threadsafe, it should not be called
+        # run_coroutine_threadsafe should NOT be called at all when skip_tts=True
+        # (mock_handler has no side-effects that would call it)
         mock_rct.assert_not_called()
 
     def test_dispatcher_passes_active_project_snapshot_to_handler(self):

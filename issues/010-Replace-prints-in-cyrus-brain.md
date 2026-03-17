@@ -1,18 +1,18 @@
 ---
 id=010-Replace-prints-in-cyrus-brain
 title=Issue 010: Replace print() calls in cyrus_brain.py
-state=PLANNED
+state=GROOMED
 parent=
 children=
 split_count=0
 force_split=false
 needs_interview=false
 verify_count=0
-total_input_tokens=206890
-total_output_tokens=59
-total_duration_seconds=716
-total_iterations=74
-run_count=74
+total_input_tokens=55826
+total_output_tokens=8
+total_duration_seconds=56
+total_iterations=1
+run_count=1
 ---
 
 # Issue 010: Replace print() calls in cyrus_brain.py
@@ -830,3 +830,13 @@ grep -n "print(" cyrus2/cyrus_brain.py
 - **Iterations:** 1
 - **Model:** claude-sonnet-4-6
 - **Trigger:** auto/build
+
+### GROOMED — 2026-03-17 00:33:01Z
+
+- **From:** NEW
+- **Duration in stage:** 0s
+- **Input tokens:** 55,826 (final context: 55,826)
+- **Output tokens:** 8
+- **Iterations:** 1
+- **Model:** claude-haiku-4-5-20251001
+- **Trigger:** auto/triage

@@ -1,18 +1,18 @@
 ---
 id=011-Replace-prints-in-cyrus-voice
 title=Issue 011: Replace print() calls in cyrus_voice.py
-state=PLANNED
+state=GROOMED
 parent=
 children=
 split_count=0
 force_split=false
 needs_interview=false
 verify_count=0
-total_input_tokens=268946
-total_output_tokens=80
-total_duration_seconds=1140
-total_iterations=74
-run_count=74
+total_input_tokens=69464
+total_output_tokens=6
+total_duration_seconds=46
+total_iterations=1
+run_count=1
 ---
 
 # Issue 011: Replace print() calls in cyrus_voice.py
@@ -831,3 +831,13 @@ grep -n "print(" cyrus2/cyrus_voice.py
 - **Iterations:** 1
 - **Model:** claude-sonnet-4-6
 - **Trigger:** auto/build
+
+### GROOMED — 2026-03-17 00:32:52Z
+
+- **From:** NEW
+- **Duration in stage:** 0s
+- **Input tokens:** 69,464 (final context: 69,464)
+- **Output tokens:** 6
+- **Iterations:** 1
+- **Model:** claude-haiku-4-5-20251001
+- **Trigger:** auto/triage

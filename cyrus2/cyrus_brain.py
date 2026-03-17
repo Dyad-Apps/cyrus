@@ -1122,80 +1122,148 @@ async def handle_voice_connection(
             pass
 
 
+# ── Subsystem initializers ─────────────────────────────────────────────────────
+
+
+def _init_queues() -> tuple[asyncio.Queue, asyncio.Queue]:
+    """Initialize the communication queues between brain subsystems.
+
+    Returns a fresh (speak_queue, utterance_queue) pair on every call so
+    there is no stale state across restarts. Callers must assign the return
+    values to the module globals before starting any dependent tasks.
+    """
+    return asyncio.Queue(), asyncio.Queue()
+
+
+def _init_session(loop: asyncio.AbstractEventLoop) -> "SessionManager":
+    """Create, configure, and start the SessionManager; seed the active project.
+
+    Seeds _active_project to the first detected VS Code window title so the
+    routing loop has a project context available from the very first utterance —
+    before the window-focus tracker fires its initial update.
+    """
+    global _active_project
+    session_mgr = _make_session_manager(loop)
+    session_mgr.start()
+    # Seed the active project from the first detected VS Code window so routing
+    # works immediately without waiting for a window-focus event.
+    first = _vs_code_windows()
+    if first:
+        with _active_project_lock:
+            _active_project = first[0][0]
+    return session_mgr
+
+
+def _init_background_threads(
+    session_mgr: "SessionManager",
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    """Start the window-focus tracker and VS Code submit worker as daemon threads.
+
+    Both threads are daemons so they exit cleanly when the process exits.
+    The submit worker owns a single COM STA apartment for all VS Code UIA
+    writes, preventing race conditions when multiple coroutines need to type.
+    """
+    # Window focus tracker — updates _active_project when the user switches windows
+    threading.Thread(
+        target=_start_active_tracker,
+        args=(session_mgr, loop),
+        daemon=True,
+    ).start()
+    # VS Code submit worker — single COM apartment, stable across sessions
+    threading.Thread(target=_submit_worker, daemon=True).start()
+
+
+def _init_async_tasks(
+    session_mgr: "SessionManager",
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    """Schedule the speak-worker and routing-loop as fire-and-forget async tasks.
+
+    Both coroutines run concurrently alongside serve_forever() on the TCP/WS
+    servers. The speak worker drains _speak_queue and forwards messages to the
+    voice service; the routing loop processes inbound utterances and dispatches
+    commands.
+    """
+    asyncio.create_task(_speak_worker())
+    asyncio.create_task(routing_loop(session_mgr, loop))
+
+
+async def _init_servers(
+    host: str,
+    port: int,
+    session_mgr: "SessionManager",
+    loop: asyncio.AbstractEventLoop,
+) -> tuple:
+    """Bind TCP and WebSocket servers and print their listening addresses.
+
+    Returns (voice_server, hook_server, mobile_server). The first two are
+    asyncio.Server objects that must be kept alive via an async context
+    manager; mobile_server is a websockets.WebSocketServer closed via
+    wait_closed().
+    """
+    # Voice TCP (port 8766) — receives utterances and TTS status from cyrus_voice.py
+    voice_server = await asyncio.start_server(
+        lambda r, w: handle_voice_connection(r, w, session_mgr, loop),
+        host,
+        port,
+    )
+    addr = voice_server.sockets[0].getsockname()
+    print(f"[Brain] Listening for voice service on {addr[0]}:{addr[1]}")
+
+    # Hook TCP (port 8767) — Claude Code Stop hook sends completion events here
+    hook_server = await asyncio.start_server(
+        lambda r, w: handle_hook_connection(r, w, session_mgr),
+        host,
+        HOOK_PORT,
+    )
+    hook_addr = hook_server.sockets[0].getsockname()
+    print(f"[Brain] Listening for Claude hooks on {hook_addr[0]}:{hook_addr[1]}")
+
+    # Mobile WebSocket (port 8769) — streams events to the mobile companion app
+    mobile_server = await websockets.serve(
+        handle_mobile_ws,
+        host,
+        MOBILE_PORT,
+        ping_interval=None,
+        ping_timeout=None,
+    )
+    print(f"[Brain] Listening for mobile clients on {host}:{MOBILE_PORT} (WebSocket)")
+
+    return voice_server, hook_server, mobile_server
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 
 async def main() -> None:
-    global _speak_queue, _utterance_queue, _active_project
+    """Initialize and run Cyrus Brain — logic and VS Code watcher service."""
+    global _speak_queue, _utterance_queue
+
+    # Startup sequence:
+    # 1. Queues initialized (enables inter-task communication)
+    # 2. Chime handlers registered (enables audio feedback to voice service)
+    # 3. Session manager started (scans VS Code windows, seeds active project)
+    # 4. Background threads started (window tracker + VS Code submit worker)
+    # 5. Async tasks created (speak worker + routing loop)
+    # 6. Servers started (voice TCP :8766, hook TCP :8767, mobile WS :8769)
 
     parser = argparse.ArgumentParser(description="Cyrus Brain — logic/watcher service")
     parser.add_argument("--host", default=BRAIN_HOST, help="Listen host")
     parser.add_argument("--port", type=int, default=BRAIN_PORT, help="Listen port")
     args = parser.parse_args()
 
-    _speak_queue = asyncio.Queue()
-    _utterance_queue = asyncio.Queue()
     loop = asyncio.get_event_loop()
-
-    # Register brain's chime handlers (websocket IPC to voice service)
+    _speak_queue, _utterance_queue = _init_queues()
     register_chime_handlers(
         chime_fn=lambda: _send_threadsafe({"type": "chime"}, loop),
         listen_chime_fn=lambda: _send_threadsafe({"type": "listen_chime"}, loop),
     )
-
-    # Session manager starts immediately — scans VS Code windows
-    session_mgr = _make_session_manager(loop)
-    session_mgr.start()
-
-    # Set initial active project
-    first = _vs_code_windows()
-    if first:
-        with _active_project_lock:
-            _active_project = first[0][0]
-
-    # Window focus tracker
-    threading.Thread(
-        target=_start_active_tracker,
-        args=(session_mgr, loop),
-        daemon=True,
-    ).start()
-
-    # Dedicated VS Code submit thread — COM initialized once, stable apartment
-    threading.Thread(target=_submit_worker, daemon=True).start()
-
-    # Speak worker — forwards queued speak requests to voice
-    asyncio.create_task(_speak_worker())
-
-    # Routing loop — processes utterances
-    asyncio.create_task(routing_loop(session_mgr, loop))
-
-    # Voice TCP server (port 8766)
-    voice_server = await asyncio.start_server(
-        lambda r, w: handle_voice_connection(r, w, session_mgr, loop),
-        args.host,
-        args.port,
-    )
-    addr = voice_server.sockets[0].getsockname()
-    print(f"[Brain] Listening for voice service on {addr[0]}:{addr[1]}")
-
-    # Hook TCP server (port 8767) — Claude Code Stop hook connects here
-    hook_server = await asyncio.start_server(
-        lambda r, w: handle_hook_connection(r, w, session_mgr),
-        args.host,
-        HOOK_PORT,
-    )
-    hook_addr = hook_server.sockets[0].getsockname()
-    print(f"[Brain] Listening for Claude hooks on {hook_addr[0]}:{hook_addr[1]}")
-    # Mobile WebSocket server (port 8768)
-    mobile_server = await websockets.serve(
-        handle_mobile_ws,
-        args.host,
-        MOBILE_PORT,
-        ping_interval=None,
-        ping_timeout=None,
-    )
-    print(
-        f"[Brain] Listening for mobile clients on {args.host}:{MOBILE_PORT} (WebSocket)"
+    session_mgr = _init_session(loop)
+    _init_background_threads(session_mgr, loop)
+    _init_async_tasks(session_mgr, loop)
+    voice_server, hook_server, mobile_server = await _init_servers(
+        args.host, args.port, session_mgr, loop
     )
     print("[Brain] Waiting for voice to connect...")
 
