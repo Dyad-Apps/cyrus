@@ -224,7 +224,8 @@ class TestVsCodeWindowsHeadless:
     def test_returns_registered_sessions_as_tuples(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """_vs_code_windows() returns (project, subname) tuples from registered sessions.
+        """_vs_code_windows() returns (project, subname) tuples from registered
+        sessions.
 
         The companion extension populates _registered_sessions; _vs_code_windows()
         must convert that dict into the same (proj, subname) tuple format used
@@ -497,7 +498,9 @@ class TestSubmitToVscodeHeadless:
         """
         brain = _import_brain_headless(monkeypatch)
 
-        with patch.object(brain, "_submit_via_extension", return_value=True) as mock_ext:
+        with patch.object(
+            brain, "_submit_via_extension", return_value=True
+        ) as mock_ext:
             result = brain._submit_to_vscode_impl("hello world")
 
         assert result is True
@@ -547,9 +550,11 @@ class TestSubmitToVscodeHeadless:
         # Patch the submit impl to avoid blocking
         brain._submit_request_queue.put(("test text", threading.Event(), [False]))
 
-        # If CoInitializeEx were called, it would raise NameError (comtypes not imported)
-        # The worker should run without error (we just test it doesn't crash on start)
-        with patch.object(brain, "_submit_to_vscode_impl", return_value=True) as mock_impl:
+        # If CoInitializeEx were called, it would raise NameError (comtypes not
+        # imported). The worker should run without error (no crash on start).
+        with patch.object(
+            brain, "_submit_to_vscode_impl", return_value=True
+        ) as mock_impl:
             t = threading.Thread(target=brain._submit_worker, daemon=True)
             t.start()
             time.sleep(0.2)
@@ -597,7 +602,7 @@ class TestBrainHeadlessImport:
         Existing Windows deployments must default to the GUI-full mode.
         """
         # Import with HEADLESS=1 first (required to import on Linux)
-        brain = _import_brain_headless(monkeypatch)
+        _import_brain_headless(monkeypatch)
         # Now simulate unset env var by checking the config directly
         monkeypatch.delenv("CYRUS_HEADLESS", raising=False)
         cfg = _reload_config(monkeypatch, {})
@@ -621,9 +626,7 @@ class TestEnvExampleDocumentation:
         env_example = Path(__file__).parent.parent.parent / ".env.example"
         assert env_example.exists(), ".env.example must exist"
         content = env_example.read_text()
-        assert "CYRUS_HEADLESS" in content, (
-            ".env.example must document CYRUS_HEADLESS"
-        )
+        assert "CYRUS_HEADLESS" in content, ".env.example must document CYRUS_HEADLESS"
 
     def test_env_example_headless_shows_default_zero(self) -> None:
         """The .env.example CYRUS_HEADLESS entry shows 0 as the default.

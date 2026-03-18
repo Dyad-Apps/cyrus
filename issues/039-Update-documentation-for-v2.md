@@ -1,7 +1,7 @@
 ---
 id=039-Update-documentation-for-v2
 title=Issue 039: Update Documentation for v2
-state=PLANNED
+state=GROOMED
 parent=
 children=
 split_count=0

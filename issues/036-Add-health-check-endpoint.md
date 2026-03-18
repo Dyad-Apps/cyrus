@@ -1,7 +1,7 @@
 ---
 id=036-Add-health-check-endpoint
 title=Issue 036: Add Health Check Endpoint
-state=PLANNED
+state=GROOMED
 parent=
 children=
 split_count=0

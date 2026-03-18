@@ -1,7 +1,7 @@
 ---
 id=037-Add-configurable-whisper-model
 title=Issue 037: Add Configurable Whisper Model
-state=PLANNED
+state=GROOMED
 parent=
 children=
 split_count=0

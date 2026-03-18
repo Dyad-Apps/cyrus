@@ -8,11 +8,11 @@ split_count=0
 force_split=false
 needs_interview=false
 verify_count=0
-total_input_tokens=90841
-total_output_tokens=32
-total_duration_seconds=351
-total_iterations=79
-run_count=79
+total_input_tokens=199837
+total_output_tokens=75
+total_duration_seconds=715
+total_iterations=81
+run_count=81
 ---
 
 # Issue 031: Add Companion Extension Registration
@@ -935,3 +935,25 @@ Enhance the companion extension to initiate outbound connection to the brain on 
 - **Iterations:** 1
 - **Model:** claude-sonnet-4-6
 - **Trigger:** auto/build
+
+### GROOMED — 2026-03-18 18:51:53Z
+
+- **From:** GROOMED
+- **Duration in stage:** 191s
+- **Input tokens:** 52,409 (final context: 52,409)
+- **Output tokens:** 25
+- **Iterations:** 1
+- **Context used:** 26%
+- **Model:** claude-opus-4-6
+- **Trigger:** auto/plan
+
+### PLANNED — 2026-03-18 19:01:19Z
+
+- **From:** PLANNED
+- **Duration in stage:** 173s
+- **Input tokens:** 56,587 (final context: 56,587)
+- **Output tokens:** 18
+- **Iterations:** 1
+- **Context used:** 28%
+- **Model:** claude-opus-4-6
+- **Trigger:** manual/plan

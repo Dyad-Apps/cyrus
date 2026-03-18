@@ -1,7 +1,7 @@
 ---
 id=016-Fix-file-handle-leak
 title=Issue 016: Fix file handle leak
-state=BUILT
+state=COMPLETE
 parent=
 children=046,047,048,049,050,051,052
 split_count=0
@@ -821,3 +821,13 @@ lsof -p $(pgrep -f "python cyrus_brain.py") | grep port_file
 - **Context used:** 19%
 - **Model:** claude-sonnet-4-6
 - **Trigger:** auto/build
+
+### COMPLETE — 2026-03-18 18:59:38Z
+
+- **From:** BUILT
+- **Duration in stage:** 0s
+- **Input tokens:** 0 (final context: 0)
+- **Output tokens:** 0
+- **Iterations:** 0
+- **Model:** 
+- **Trigger:** auto/verify

@@ -37,42 +37,62 @@ import threading
 import time
 from dataclasses import dataclass
 
-import comtypes
-import pyautogui
-import pygetwindow as gw
-import pyperclip
+# Import cyrus_config first so HEADLESS is available before Windows-specific
+# imports are conditionally loaded.  Importing this module has no side effects
+# (no hardware or GUI access) so it is always safe to import unconditionally.
+from cyrus_config import (
+    AUTH_TOKEN,
+    BRAIN_PORT,
+    HEADLESS,
+    HOOK_PORT,
+    MOBILE_PORT,
+    validate_auth_token,
+)
+
+# Guard Windows-only GUI libraries behind the HEADLESS flag.
+# In HEADLESS mode (CYRUS_HEADLESS=1) these packages are never imported, which
+# allows the brain to start on Linux / Docker where they are not installed.
+# The companion extension (port 8770) replaces all UIA-based functionality.
+if not HEADLESS:
+    import comtypes
+    import pyautogui
+    import pygetwindow as gw
+    import pyperclip
+
 import websockets
 
-try:
-    import uiautomation as auto
-except Exception:
-    # comtypes cache is likely corrupted — clear it and retry
+if not HEADLESS:
     try:
-        import importlib
-        import os as _os
-        import shutil
-
-        import comtypes.gen
-
-        _gen_dir = _os.path.dirname(comtypes.gen.__file__)
-        shutil.rmtree(_gen_dir, ignore_errors=True)
-        _os.makedirs(_gen_dir, exist_ok=True)
-        # Re-create __init__.py so comtypes.gen is still a package
-        with open(_os.path.join(_gen_dir, "__init__.py"), "w") as _f:
-            _f.write("# auto-generated\n")
-        logging.getLogger("cyrus.brain").warning(
-            "Cleared corrupted comtypes cache, retrying..."
-        )
-        importlib.invalidate_caches()
         import uiautomation as auto
-    except Exception as _e2:
-        logging.getLogger("cyrus.brain").error(
-            "FATAL: UIAutomation still unavailable after cache clear (%s). "
-            "Try: pip install --force-reinstall comtypes uiautomation",
-            _e2,
-            exc_info=True,
-        )
-        raise
+    except Exception:
+        # comtypes cache is likely corrupted — clear it and retry
+        try:
+            import importlib
+            import os as _os
+            import shutil
+
+            import comtypes.gen
+
+            _gen_dir = _os.path.dirname(comtypes.gen.__file__)
+            shutil.rmtree(_gen_dir, ignore_errors=True)
+            _os.makedirs(_gen_dir, exist_ok=True)
+            # Re-create __init__.py so comtypes.gen is still a package
+            with open(_os.path.join(_gen_dir, "__init__.py"), "w") as _f:
+                _f.write("# auto-generated\n")
+            logging.getLogger("cyrus.brain").warning(
+                "Cleared corrupted comtypes cache, retrying..."
+            )
+            importlib.invalidate_caches()
+            import uiautomation as auto
+        except Exception as _e2:
+            logging.getLogger("cyrus.brain").error(
+                "FATAL: UIAutomation still unavailable after cache clear (%s). "
+                "Try: pip install --force-reinstall comtypes uiautomation",
+                _e2,
+                exc_info=True,
+            )
+            raise
+
 from cyrus_common import (
     _CHAT_INPUT_HINT,
     VOICE_HINT,
@@ -94,13 +114,6 @@ from cyrus_common import (
     _vs_code_windows,
     clean_for_speech,
     register_chime_handlers,
-)
-from cyrus_config import (
-    AUTH_TOKEN,
-    BRAIN_PORT,
-    HOOK_PORT,
-    MOBILE_PORT,
-    validate_auth_token,
 )
 from cyrus_log import setup_logging
 
@@ -156,8 +169,10 @@ _submit_request_queue: _stdlib_queue.Queue = _stdlib_queue.Queue()
 _voice_writer: asyncio.StreamWriter = None
 _voice_lock = asyncio.Lock()
 
-auto.uiautomation.SetGlobalSearchTimeout(2)
-pyautogui.FAILSAFE = False
+# Configure UIA and input automation — only available in non-HEADLESS mode.
+if not HEADLESS:
+    auto.uiautomation.SetGlobalSearchTimeout(2)
+    pyautogui.FAILSAFE = False
 
 # ── Send to voice ──────────────────────────────────────────────────────────────
 
@@ -533,6 +548,14 @@ def _execute_cyrus_command(
 
 
 def _start_active_tracker(session_mgr: SessionManager, loop: asyncio.AbstractEventLoop):
+    """Poll pygetwindow for the active VS Code window and update _active_project.
+
+    In HEADLESS mode this function returns immediately — pygetwindow is
+    unavailable on Linux/Docker.  The companion extension sends focus/blur
+    messages to update the active project instead.
+    """
+    if HEADLESS:
+        return
     global _active_project
     while True:
         try:
@@ -670,10 +693,18 @@ def _submit_to_vscode_impl(text: str) -> bool:
     """Runs on the dedicated submit thread.
 
     Uses pixel coords — no COM cross-thread issues.
+
+    In HEADLESS mode only the companion extension path is used.  The UIA /
+    pyautogui fallback requires Windows GUI libraries that are unavailable on
+    Linux/Docker, so if the companion is down the submission fails gracefully.
     """
     # ── 0. Try companion extension (no pixel coords, cross-platform) ──────────
     if _submit_via_extension(text):
         return True
+    if HEADLESS:
+        # No UIA fallback available — companion is the only submit path.
+        log.warning("Companion extension unavailable in HEADLESS mode — submit failed")
+        return False
     log.warning("Companion extension unavailable -- falling back to UIA")
 
     with _active_project_lock:
@@ -801,8 +832,15 @@ def submit_to_vscode(text: str) -> bool:
 
 
 def _submit_worker() -> None:
-    """Dedicated thread: COM initialized once, handles all VS Code submits."""
-    comtypes.CoInitializeEx()
+    """Dedicated thread: COM initialized once, handles all VS Code submits.
+
+    In HEADLESS mode, comtypes is not imported so CoInitializeEx() is skipped.
+    Submissions go via the companion extension only (no UIA).
+    """
+    if not HEADLESS:
+        # Initialize a COM STA apartment for UIA operations on this thread.
+        # comtypes is only imported in non-HEADLESS mode.
+        comtypes.CoInitializeEx()
     while True:
         text, ev, result_holder = _submit_request_queue.get()
         try:
@@ -1391,6 +1429,11 @@ async def main() -> None:
     # 6. Servers started (voice TCP :8766, hook TCP :8767, mobile WS :8769)
 
     setup_logging("cyrus")
+
+    if HEADLESS:
+        log.info("Brain running in HEADLESS mode — Windows GUI paths disabled")
+        log.info("Companion extension registration required for full functionality")
+
     parser = argparse.ArgumentParser(description="Cyrus Brain — logic/watcher service")
     parser.add_argument("--host", default=BRAIN_HOST, help="Listen host")
     parser.add_argument("--port", type=int, default=BRAIN_PORT, help="Listen port")

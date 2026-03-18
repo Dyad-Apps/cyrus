@@ -1,7 +1,7 @@
 ---
 id=038-Add-session-state-persistence
 title=Issue 038: Add Session State Persistence
-state=PLANNED
+state=GROOMED
 parent=
 children=
 split_count=0

@@ -19,6 +19,10 @@ import time
 from collections import deque
 from collections.abc import Callable
 
+# HEADLESS is read from cyrus_config so that a single env var (CYRUS_HEADLESS=1)
+# disables all Windows GUI code across both this module and cyrus_brain.py.
+from cyrus_config import HEADLESS
+
 try:
     import comtypes
     import pyautogui
@@ -138,6 +142,14 @@ _chat_input_coords: dict = {}
 # PermissionWatcher, and the submit thread in cyrus_brain.py.
 _chat_input_coords_lock: threading.Lock = threading.Lock()
 
+# ── Companion extension session registry (HEADLESS mode) ───────────────────────
+# In HEADLESS mode, pygetwindow is unavailable so the companion extension
+# registers sessions here via TCP messages on port 8770.
+# Maps project_name → window subname
+# (e.g. "myproject" → "myproject - Visual Studio Code").
+# _vs_code_windows() reads this dict instead of calling gw.getAllWindows().
+_registered_sessions: dict[str, str] = {}
+
 # ── Chime registration ─────────────────────────────────────────────────────────
 
 _chime_fn: Callable | None = None
@@ -222,7 +234,17 @@ def _resolve_project(query: str, aliases: dict) -> str | None:
 
 
 def _vs_code_windows() -> list[tuple[str, str]]:
-    """Return [(project_name, subname), ...] for every open VS Code window."""
+    """Return [(project_name, subname), ...] for every open VS Code window.
+
+    In HEADLESS mode, returns sessions registered by the companion extension
+    (via _registered_sessions) instead of calling pygetwindow — which is
+    unavailable on Linux / Docker deployments.
+    """
+    if HEADLESS:
+        # Companion extension populates _registered_sessions via TCP messages.
+        # Return a stable list snapshot; the caller must not hold the GIL across
+        # slow operations while iterating this dict.
+        return list(_registered_sessions.items())
     if not _HAS_UIA:
         return []
     seen: set[str] = set()
@@ -625,6 +647,11 @@ class ChatWatcher:
                 return True
 
         def poll():
+            if HEADLESS:
+                # In HEADLESS mode, the hook's Stop event (port 8767) is the
+                # sole chat notification path. UIA polling is unavailable on
+                # Linux/Docker where Windows GUI libraries are absent.
+                return
             if _HAS_UIA:
                 try:
                     comtypes.CoInitializeEx()
@@ -1168,6 +1195,12 @@ class PermissionWatcher:
         """
 
         def poll():
+            if HEADLESS:
+                # In HEADLESS mode, arm_from_hook() is the sole permission
+                # trigger. UIA polling is unavailable on Linux/Docker where
+                # Windows GUI libraries are absent. The companion extension
+                # sends permission_respond messages instead of auto-clicking.
+                return
             if _HAS_UIA:
                 try:
                     comtypes.CoInitializeEx()
