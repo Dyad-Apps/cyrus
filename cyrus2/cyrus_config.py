@@ -84,6 +84,14 @@ PERMISSION_WATCHER_POLL_INTERVAL: float = float(
 # Hard cap on spoken words in a TTS call (~12 s at 150 wpm)
 MAX_SPEECH_WORDS: int = int(os.environ.get("CYRUS_MAX_SPEECH_WORDS", "200"))
 
+# ── Headless mode ─────────────────────────────────────────────────────────────
+# When True, all Windows GUI libraries (comtypes, pyautogui, pygetwindow,
+# pyperclip, uiautomation) are NOT imported. The companion extension provides
+# session discovery and text submission via TCP on port 8770. Set to True in
+# Docker / Linux deployments where Windows GUI libraries are unavailable.
+
+HEADLESS: bool = os.environ.get("CYRUS_HEADLESS") == "1"
+
 # ── Authentication ─────────────────────────────────────────────────────────────
 # Shared-secret token used to authenticate all TCP port connections.  Every
 # client (cyrus_hook.py, cyrus_voice.py, mobile companion) must present this

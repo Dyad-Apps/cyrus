@@ -1,18 +1,18 @@
 ---
 id=026-Write-test-companion-protocol
 title=Issue 026: Write test_companion_protocol.py (Tier 4)
-state=STUCK
+state=COMPLETE
 parent=
 children=
 split_count=0
 force_split=false
 needs_interview=false
 verify_count=1
-total_input_tokens=217691
-total_output_tokens=84
-total_duration_seconds=711
-total_iterations=71
-run_count=71
+total_input_tokens=253034
+total_output_tokens=110
+total_duration_seconds=782
+total_iterations=72
+run_count=72
 ---
 
 # Issue 026: Write test_companion_protocol.py (Tier 4)
@@ -811,5 +811,26 @@ pytest cyrus2/tests/test_companion_protocol.py -k "error or malformed" -v
 - **Output tokens:** 25
 - **Iterations:** 1
 - **Context used:** 24%
+- **Model:** claude-sonnet-4-6
+- **Trigger:** manual/build
+
+### COMPLETE — 2026-03-18 17:36:09Z
+
+- **From:** BUILT
+- **Duration in stage:** 0s
+- **Input tokens:** 0 (final context: 0)
+- **Output tokens:** 0
+- **Iterations:** 0
+- **Model:** 
+- **Trigger:** auto/verify
+
+### COMPLETE — 2026-03-18 17:36:09Z
+
+- **From:** COMPLETE
+- **Duration in stage:** 71s
+- **Input tokens:** 35,343 (final context: 35,343)
+- **Output tokens:** 26
+- **Iterations:** 1
+- **Context used:** 18%
 - **Model:** claude-sonnet-4-6
 - **Trigger:** manual/build

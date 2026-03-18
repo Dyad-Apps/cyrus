@@ -1,18 +1,18 @@
 ---
 id=028-Add-TCP-authentication-2
 title=Add auth validation to all brain server connection handlers
-state=STUCK
+state=COMPLETE
 parent=028-Add-TCP-authentication
 children=
 split_count=0
 force_split=false
 needs_interview=false
 verify_count=1
-total_input_tokens=273119
-total_output_tokens=81
-total_duration_seconds=786
-total_iterations=4
-run_count=4
+total_input_tokens=318019
+total_output_tokens=106
+total_duration_seconds=1001
+total_iterations=5
+run_count=5
 ---
 
 # Add auth validation to all brain server connection handlers
@@ -134,3 +134,24 @@ After implementing, run `uv run pytest cyrus2/tests/` to check for regressions.
 - **Context used:** 37%
 - **Model:** claude-sonnet-4-6
 - **Trigger:** auto/build
+
+### COMPLETE — 2026-03-18 17:40:45Z
+
+- **From:** BUILT
+- **Duration in stage:** 0s
+- **Input tokens:** 0 (final context: 0)
+- **Output tokens:** 0
+- **Iterations:** 0
+- **Model:** 
+- **Trigger:** auto/verify
+
+### COMPLETE — 2026-03-18 17:40:45Z
+
+- **From:** COMPLETE
+- **Duration in stage:** 215s
+- **Input tokens:** 44,900 (final context: 44,900)
+- **Output tokens:** 25
+- **Iterations:** 1
+- **Context used:** 22%
+- **Model:** claude-sonnet-4-6
+- **Trigger:** manual/build
