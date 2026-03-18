@@ -23,7 +23,10 @@ use in CI, headless servers, and test environments.
 
 from __future__ import annotations
 
+import hmac
 import os
+import secrets
+import sys
 
 # ── Port assignments ───────────────────────────────────────────────────────────
 # Each service owns one port.  Override via the corresponding CYRUS_*_PORT var.
@@ -82,3 +85,41 @@ PERMISSION_WATCHER_POLL_INTERVAL: float = float(
 
 # Hard cap on spoken words in a TTS call (~12 s at 150 wpm)
 MAX_SPEECH_WORDS: int = int(os.environ.get("CYRUS_MAX_SPEECH_WORDS", "200"))
+
+# ── Authentication ─────────────────────────────────────────────────────────────
+# Shared-secret token used to authenticate all TCP port connections.  Every
+# client (cyrus_hook.py, cyrus_voice.py, mobile companion) must present this
+# token on connection; the brain rejects connections that omit or mismatch it.
+#
+# If CYRUS_AUTH_TOKEN is not set a random token is generated at startup and
+# printed to stderr so the operator can copy it into their .env file.  The
+# generated token is unique per process, so leaving the env var unset effectively
+# blocks all clients (they will not know the generated token).
+
+AUTH_TOKEN: str = os.environ.get("CYRUS_AUTH_TOKEN", "")
+if not AUTH_TOKEN:
+    AUTH_TOKEN = secrets.token_hex(16)
+    print(
+        f"WARN: No CYRUS_AUTH_TOKEN set. Generated: {AUTH_TOKEN}",
+        file=sys.stderr,
+    )
+    print(
+        "      Set CYRUS_AUTH_TOKEN in .env or shell. Generate with: "
+        "python -c \"import secrets; print(secrets.token_hex(16))\"",
+        file=sys.stderr,
+    )
+
+
+def validate_auth_token(received: str) -> bool:
+    """Check if received token matches the configured AUTH_TOKEN.
+
+    Uses hmac.compare_digest for constant-time comparison, preventing
+    timing-based side-channel attacks on the token value.
+
+    Args:
+        received: The token string received from a connecting client.
+
+    Returns:
+        True if received matches AUTH_TOKEN, False otherwise.
+    """
+    return hmac.compare_digest(received, AUTH_TOKEN)

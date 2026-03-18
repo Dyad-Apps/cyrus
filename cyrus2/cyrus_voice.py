@@ -37,6 +37,7 @@ import pygame
 import sounddevice as sd
 import torch
 from cyrus2.cyrus_config import (
+    AUTH_TOKEN,
     BRAIN_PORT,
     SILENCE_WINDOW,
     SPEECH_THRESHOLD,
@@ -458,6 +459,13 @@ async def voice_loop(whisper_model, reader, writer, loop) -> None:
     """Transcribe utterances and stream to brain. Receive and play TTS."""
     global _brain_writer
     _brain_writer = writer
+
+    # ── Authentication handshake ───────────────────────────────────────────────
+    # Send the shared-secret token as the first message so the brain can
+    # validate this connection before accepting any utterances.
+    auth_msg = json.dumps({"type": "auth", "token": AUTH_TOKEN}) + "\n"
+    writer.write(auth_msg.encode())
+    await writer.drain()
 
     disconnected = asyncio.Event()
 

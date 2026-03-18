@@ -26,13 +26,23 @@ except (ImportError, ValueError):
     # Fallback if cyrus_config is unavailable or misconfigured — never block Claude
     BRAIN_PORT = 8767
 
+# Read AUTH_TOKEN directly from the environment at module load time so that
+# reloading this module picks up the current value without requiring a separate
+# cyrus_config reload.  Never block Claude if the var is absent — just send an
+# empty token (the brain will reject the connection, which is the correct behaviour
+# when the operator has not configured CYRUS_AUTH_TOKEN).
+AUTH_TOKEN: str = os.environ.get("CYRUS_AUTH_TOKEN", "")
+
 BRAIN_HOST = "localhost"
 
 
 def _send(msg: dict) -> None:
+    # Merge auth token into a copy so the caller's dict is not mutated.
+    # The brain validates the token on every message before dispatching.
+    payload = {**msg, "token": AUTH_TOKEN}
     try:
         with socket.create_connection((BRAIN_HOST, BRAIN_PORT), timeout=2) as s:
-            s.sendall((json.dumps(msg) + "\n").encode())
+            s.sendall((json.dumps(payload) + "\n").encode())
     except Exception:
         pass  # Brain not running — silent, never block Claude
 

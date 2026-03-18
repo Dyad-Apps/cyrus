@@ -1,10 +1,18 @@
 ---
 id=028-Add-TCP-authentication-1
 title=Add AUTH_TOKEN infrastructure to cyrus_config.py
-state=NEW
+state=GROOMED
 parent=028-Add-TCP-authentication
 children=
 split_count=0
+force_split=false
+needs_interview=false
+verify_count=0
+total_input_tokens=55778
+total_output_tokens=5
+total_duration_seconds=78
+total_iterations=1
+run_count=1
 ---
 
 # Add AUTH_TOKEN infrastructure to cyrus_config.py
@@ -64,3 +72,15 @@ helper, and the `.env.example` documentation entry.
 ## Testing
 Run `uv run pytest cyrus2/tests/test_027_cyrus_config.py` to confirm no regression.
 Full auth tests are in child issue 028-3.
+
+## Stage Log
+
+### GROOMED — 2026-03-18 02:29:17Z
+
+- **From:** NEW
+- **Duration in stage:** 0s
+- **Input tokens:** 55,778 (final context: 55,778)
+- **Output tokens:** 5
+- **Iterations:** 1
+- **Model:** claude-haiku-4-5-20251001
+- **Trigger:** auto/triage

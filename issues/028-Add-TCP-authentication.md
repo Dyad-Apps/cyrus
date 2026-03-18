@@ -4,15 +4,15 @@ title=Issue 028: Add TCP Authentication
 state=SPLIT
 parent=
 children=028-Add-TCP-authentication-1,028-Add-TCP-authentication-2,028-Add-TCP-authentication-3
-split_count=1
+split_count=3
 force_split=false
 needs_interview=false
 verify_count=0
-total_input_tokens=104202
-total_output_tokens=31
-total_duration_seconds=514
-total_iterations=68
-run_count=68
+total_input_tokens=488617
+total_output_tokens=116
+total_duration_seconds=2319
+total_iterations=72
+run_count=70
 ---
 
 # Issue 028: Add TCP Authentication

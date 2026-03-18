@@ -1,10 +1,18 @@
 ---
 id=028-Add-TCP-authentication-2
 title=Add auth validation to all brain server connection handlers
-state=NEW
+state=GROOMED
 parent=028-Add-TCP-authentication
 children=
 split_count=0
+force_split=false
+needs_interview=false
+verify_count=0
+total_input_tokens=64644
+total_output_tokens=4
+total_duration_seconds=58
+total_iterations=1
+run_count=1
 ---
 
 # Add auth validation to all brain server connection handlers
@@ -79,3 +87,15 @@ brain  → client: {"error": "unauthorized"}                    # if invalid, th
 ## Testing
 Full auth tests covering brain behavior are in child issue 028-3.
 After implementing, run `uv run pytest cyrus2/tests/` to check for regressions.
+
+## Stage Log
+
+### GROOMED — 2026-03-18 02:30:15Z
+
+- **From:** NEW
+- **Duration in stage:** 0s
+- **Input tokens:** 64,644 (final context: 64,644)
+- **Output tokens:** 4
+- **Iterations:** 1
+- **Model:** claude-haiku-4-5-20251001
+- **Trigger:** auto/triage

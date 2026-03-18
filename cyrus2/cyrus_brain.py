@@ -95,7 +95,7 @@ from cyrus_common import (
     clean_for_speech,
     register_chime_handlers,
 )
-from cyrus_config import BRAIN_PORT, HOOK_PORT, MOBILE_PORT
+from cyrus_config import AUTH_TOKEN, BRAIN_PORT, HOOK_PORT, MOBILE_PORT, validate_auth_token
 from cyrus_log import setup_logging
 
 # ── Module logger ──────────────────────────────────────────────────────────────
@@ -635,7 +635,8 @@ def _submit_via_extension(text: str) -> bool:
 
     try:
         with _open_companion_connection(safe) as s:
-            s.sendall((json.dumps({"text": text}) + "\n").encode("utf-8"))
+            # Include auth token so companion extension can validate the connection
+            s.sendall((json.dumps({"text": text, "token": AUTH_TOKEN}) + "\n").encode("utf-8"))
             raw = b""
             while b"\n" not in raw:
                 chunk = s.recv(4096)
@@ -847,11 +848,36 @@ async def voice_reader(
 
 
 async def handle_mobile_ws(ws) -> None:
-    """Handle a single mobile WebSocket client."""
-    with _mobile_clients_lock:
-        _mobile_clients.add(ws)
+    """Handle a single mobile WebSocket client.
+
+    The first message must be an auth handshake: {"type": "auth", "token": "..."}.
+    Clients that omit the auth message or send the wrong token are disconnected
+    immediately.  Subsequent messages are processed normally (utterance / ping).
+    """
     addr = ws.remote_address
     log.info("Mobile client connected: %s", addr)
+
+    # ── Authentication handshake ───────────────────────────────────────────────
+    # Expect the first message to carry the shared-secret token.  Reject
+    # connections that mismatch; log the address, not the expected token value.
+    try:
+        first_raw = await asyncio.wait_for(ws.recv(), timeout=5.0)
+        first_msg = json.loads(first_raw)
+        received_token = first_msg.get("token", "")
+        if not validate_auth_token(received_token):
+            log.warning("Mobile auth failed from %s — unauthorized", addr)
+            await ws.close()
+            return
+    except (asyncio.TimeoutError, json.JSONDecodeError, Exception) as e:
+        log.warning("Mobile auth error from %s: %s", addr, e)
+        try:
+            await ws.close()
+        except Exception:
+            pass
+        return
+
+    with _mobile_clients_lock:
+        _mobile_clients.add(ws)
     try:
         async for raw in ws:
             try:
@@ -1039,13 +1065,26 @@ async def handle_hook_connection(
 ) -> None:
     """
     Accepts a single connection from cyrus_hook.py, reads one JSON message,
-    and dispatches on event type: stop / pre_tool / post_tool / notification.
+    validates the auth token, then dispatches on event type:
+    stop / pre_tool / post_tool / notification.
     """
+    addr = writer.get_extra_info("peername")
     try:
         raw = await asyncio.wait_for(reader.readline(), timeout=3.0)
         if not raw:
             return
         msg = json.loads(raw.decode().strip())
+
+        # ── Authentication ─────────────────────────────────────────────────────
+        # Every hook message must carry the shared-secret token.  Reject
+        # connections that omit or mismatch the token; log the address (not the
+        # expected token value) so the operator can identify the source.
+        received_token = msg.get("token", "")
+        if not validate_auth_token(received_token):
+            # Log the rejection — do NOT send the token back or expose it
+            log.warning("Hook connection rejected: invalid auth token from %s", addr)
+            return
+
         event = msg.get("event", "stop")
         cwd = msg.get("cwd", "")
         proj = _resolve_project_from_cwd(cwd, session_mgr)
@@ -1147,6 +1186,32 @@ async def handle_voice_connection(
 ) -> None:
     global _voice_writer
     addr = writer.get_extra_info("peername")
+
+    # ── Authentication handshake ───────────────────────────────────────────────
+    # Voice must send {"type": "auth", "token": "..."} as its first message.
+    # Reject connections that omit or mismatch the token; log the address only
+    # (not the expected token value) to avoid credential exposure in logs.
+    try:
+        first_raw = await asyncio.wait_for(reader.readline(), timeout=5.0)
+        if not first_raw:
+            log.warning("Voice auth failed from %s — empty first message", addr)
+            writer.close()
+            return
+        first_msg = json.loads(first_raw.decode().strip())
+        received_token = first_msg.get("token", "")
+        if not validate_auth_token(received_token):
+            log.warning("Voice auth failed from %s — unauthorized", addr)
+            writer.write((json.dumps({"error": "unauthorized"}) + "\n").encode())
+            writer.close()
+            return
+    except (asyncio.TimeoutError, json.JSONDecodeError, Exception) as e:
+        log.warning("Voice auth error from %s: %s", addr, e)
+        try:
+            writer.close()
+        except Exception:
+            pass
+        return
+
     log.info("Voice service connected from %s", addr)
     _voice_writer = writer
 
