@@ -7,8 +7,8 @@
 ## Evidence
 
 - `cyrus2/tests/test_010_print_replacement.py` — 652 lines, 28 tests across 12 test classes
-- All 28 tests pass: `cyrus2/.venv/bin/python -m pytest cyrus2/tests/test_010_print_replacement.py -v`
-- Full suite passes: 226/226 tests pass (`cyrus2/.venv/bin/python -m pytest cyrus2/tests/ -v`)
+- All 28 tests pass: `TEST_COMMANDtest_010_print_replacement.py -v`
+- Full suite passes: 226/226 tests pass (`TEST_COMMAND -v`)
 - `grep -c "print(" cyrus2/cyrus_brain.py` → **0** (zero print calls)
 - `grep -c "logging\.\(debug\|info\|warning\|error\|exception\)" cyrus2/cyrus_brain.py` → **0** (zero root logger calls)
 - `ruff check cyrus2/tests/test_010_print_replacement.py` → All checks passed
@@ -42,8 +42,8 @@ The implementation includes tests beyond the minimum acceptance criteria:
 
 ## Verification Steps
 
-- [x] `cyrus2/.venv/bin/python -m pytest cyrus2/tests/test_010_print_replacement.py -v` → 28/28 passed
-- [x] `cyrus2/.venv/bin/python -m pytest cyrus2/tests/ -v` → 226/226 passed
+- [x] `TEST_COMMANDtest_010_print_replacement.py -v` → 28/28 passed
+- [x] `TEST_COMMAND -v` → 226/226 passed
 - [x] `ruff check cyrus2/tests/test_010_print_replacement.py` → All checks passed
 - [x] `ruff format --check cyrus2/tests/test_010_print_replacement.py` → formatted
 - [x] `grep -c "print(" cyrus2/cyrus_brain.py` → 0

@@ -95,7 +95,13 @@ from cyrus_common import (
     clean_for_speech,
     register_chime_handlers,
 )
-from cyrus_config import AUTH_TOKEN, BRAIN_PORT, HOOK_PORT, MOBILE_PORT, validate_auth_token
+from cyrus_config import (
+    AUTH_TOKEN,
+    BRAIN_PORT,
+    HOOK_PORT,
+    MOBILE_PORT,
+    validate_auth_token,
+)
 from cyrus_log import setup_logging
 
 # ── Module logger ──────────────────────────────────────────────────────────────
@@ -636,7 +642,8 @@ def _submit_via_extension(text: str) -> bool:
     try:
         with _open_companion_connection(safe) as s:
             # Include auth token so companion extension can validate the connection
-            s.sendall((json.dumps({"text": text, "token": AUTH_TOKEN}) + "\n").encode("utf-8"))
+            payload = json.dumps({"text": text, "token": AUTH_TOKEN}) + "\n"
+            s.sendall(payload.encode("utf-8"))
             raw = b""
             while b"\n" not in raw:
                 chunk = s.recv(4096)
@@ -866,6 +873,8 @@ async def handle_mobile_ws(ws) -> None:
         received_token = first_msg.get("token", "")
         if not validate_auth_token(received_token):
             log.warning("Mobile auth failed from %s — unauthorized", addr)
+            # Send generic error (no token details) then close
+            await ws.send(json.dumps({"error": "unauthorized"}))
             await ws.close()
             return
     except (asyncio.TimeoutError, json.JSONDecodeError, Exception) as e:
@@ -876,6 +885,8 @@ async def handle_mobile_ws(ws) -> None:
             pass
         return
 
+    # Authentication succeeded — acknowledge before joining broadcast set
+    await ws.send(json.dumps({"type": "auth_ok"}))
     with _mobile_clients_lock:
         _mobile_clients.add(ws)
     try:
@@ -1083,6 +1094,9 @@ async def handle_hook_connection(
         if not validate_auth_token(received_token):
             # Log the rejection — do NOT send the token back or expose it
             log.warning("Hook connection rejected: invalid auth token from %s", addr)
+            # Send generic error (no token details) then close
+            writer.write(json.dumps({"error": "unauthorized"}).encode() + b"\n")
+            writer.close()
             return
 
         event = msg.get("event", "stop")
@@ -1212,6 +1226,9 @@ async def handle_voice_connection(
             pass
         return
 
+    # Authentication succeeded — acknowledge before entering voice loop
+    writer.write(json.dumps({"type": "auth_ok"}).encode() + b"\n")
+    await writer.drain()
     log.info("Voice service connected from %s", addr)
     _voice_writer = writer
 

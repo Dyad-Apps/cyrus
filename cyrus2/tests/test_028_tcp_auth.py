@@ -12,13 +12,15 @@ These tests verify every acceptance criterion from the issue:
 
 Test categories
 ---------------
-  Config: AUTH_TOKEN      (4 tests) — module exposes AUTH_TOKEN, env override, generation
-  Config: validate        (3 tests) — correct / wrong / empty token validation
-  Hook: token in _send    (3 tests) — _send merges token; wrong token; no-env fallback
-  Brain: hook auth        (3 tests) — accept correct / reject wrong / reject missing token
+  Config: AUTH_TOKEN   (4 tests) — exposes AUTH_TOKEN, env override, generation
+  Config: validate     (5 tests) — correct/wrong/empty validation, constant-time
+  Hook: token in _send    (4 tests) — _send merges token; no mutation; no-env; silent
+  Brain: hook auth        (3 tests) — accept correct / reject wrong / reject missing
+  Brain: voice auth       (3 tests) — accept correct / reject wrong / reject missing
   Brain: mobile auth      (2 tests) — accept correct / reject wrong token
   Logging                 (1 test)  — mismatch logged, not exposed to client
   .env.example            (1 test)  — CYRUS_AUTH_TOKEN present in file
+  No hardware deps        (1 test)  — cyrus_config.py has no hardware imports
 
 Usage
 -----
@@ -165,24 +167,24 @@ class TestValidateAuthToken(unittest.TestCase):
             "cyrus_config is missing validate_auth_token()",
         )
         self.assertTrue(
-            callable(getattr(cyrus_config, "validate_auth_token")),
+            callable(cyrus_config.validate_auth_token),
             "validate_auth_token must be callable",
         )
 
     def test_validate_token_correct(self) -> None:
         """AC: validate_auth_token returns True when token matches AUTH_TOKEN."""
         result = self._mod.validate_auth_token("my-secret-token")
-        self.assertTrue(result, "validate_auth_token should return True on correct token")
+        self.assertTrue(result, "validate_auth_token should return True on match")
 
     def test_validate_token_wrong(self) -> None:
         """AC: validate_auth_token returns False when token does not match."""
         result = self._mod.validate_auth_token("wrong-token")
-        self.assertFalse(result, "validate_auth_token should return False on wrong token")
+        self.assertFalse(result, "validate_auth_token should return False on mismatch")
 
     def test_validate_token_empty_string(self) -> None:
         """validate_auth_token returns False when received token is empty."""
         result = self._mod.validate_auth_token("")
-        self.assertFalse(result, "validate_auth_token should return False on empty token")
+        self.assertFalse(result, "validate_auth_token should return False on empty")
 
     def test_validate_uses_constant_time_comparison(self) -> None:
         """validate_auth_token must use hmac.compare_digest (timing-safe).
@@ -204,11 +206,32 @@ class TestValidateAuthToken(unittest.TestCase):
 class TestHookSendsToken(unittest.TestCase):
     """cyrus_hook._send() must include AUTH_TOKEN in every message."""
 
+    def tearDown(self) -> None:
+        """Restore cyrus_config and cyrus_hook to clean state after each test."""
+        os.environ.pop("CYRUS_AUTH_TOKEN", None)
+        importlib.reload(cyrus_config)
+        import cyrus_hook  # noqa: PLC0415
+
+        importlib.reload(cyrus_hook)
+
     def _import_hook_with_token(self, token: str) -> object:
-        """Import (or reload) cyrus_hook with CYRUS_AUTH_TOKEN=token set."""
-        import cyrus_hook
+        """Import (or reload) cyrus_hook with CYRUS_AUTH_TOKEN=token set.
+
+        Reloads cyrus_config first so AUTH_TOKEN is updated before cyrus_hook
+        imports it via ``from cyrus_config import AUTH_TOKEN``.
+
+        Args:
+            token: Value to inject as CYRUS_AUTH_TOKEN for this test.
+
+        Returns:
+            Freshly-reloaded cyrus_hook module whose AUTH_TOKEN equals token.
+        """
+        import cyrus_hook  # noqa: PLC0415
 
         with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": token}, clear=False):
+            # Reload cyrus_config first so its AUTH_TOKEN constant reflects the
+            # patched env var; cyrus_hook imports AUTH_TOKEN at module level.
+            importlib.reload(cyrus_config)
             return importlib.reload(cyrus_hook)
 
     def test_hook_send_includes_token(self) -> None:
@@ -247,6 +270,53 @@ class TestHookSendsToken(unittest.TestCase):
         # Original dict must be unchanged -- _send should merge into a copy
         self.assertEqual(original, original_copy, "_send must not mutate caller's dict")
 
+    def test_hook_send_without_token_env(self) -> None:
+        """_send() sends an auto-generated non-empty token when CYRUS_AUTH_TOKEN unset.
+
+        cyrus_hook imports AUTH_TOKEN from cyrus_config, which auto-generates a
+        token via secrets.token_hex(16) when CYRUS_AUTH_TOKEN is absent. The hook
+        therefore sends a non-empty generated token rather than an empty string.
+        Both brain and hook share the same auto-generated value within the same
+        process, so authentication succeeds even without an explicit env var.
+        """
+        saved = _strip_cyrus_auth_env()
+        try:
+            import cyrus_hook  # noqa: PLC0415
+
+            with patch("sys.stderr", MagicMock()):
+                importlib.reload(cyrus_config)
+                hook = importlib.reload(cyrus_hook)
+
+            captured: list[bytes] = []
+            fake_sock = MagicMock()
+            fake_sock.__enter__ = lambda s: fake_sock
+            fake_sock.__exit__ = MagicMock(return_value=False)
+            fake_sock.sendall.side_effect = lambda data: captured.append(data)
+
+            with patch("socket.create_connection", return_value=fake_sock):
+                hook._send({"event": "stop", "text": "test"})
+
+            self.assertEqual(len(captured), 1, "_send must call sendall exactly once")
+            sent_json = json.loads(captured[0].decode().strip())
+            self.assertIn(
+                "token", sent_json, "_send must include 'token' field without env"
+            )
+            # cyrus_config auto-generates a non-empty token when env var is absent;
+            # hook imports from cyrus_config, so it also carries the generated value
+            self.assertNotEqual(
+                sent_json["token"],
+                "",
+                "_send must send the auto-generated token, not an empty string",
+            )
+            self.assertIsInstance(
+                sent_json["token"],
+                str,
+                "_send token must be a string",
+            )
+        finally:
+            os.environ.update(saved)
+            importlib.reload(cyrus_config)
+
     def test_hook_send_silent_on_connection_failure(self) -> None:
         """_send() must stay silent (not raise) if the brain is unreachable.
 
@@ -263,11 +333,11 @@ class TestHookSendsToken(unittest.TestCase):
 # -- Brain: hook auth tests ----------------------------------------------------
 
 
-class TestBrainVoiceAuth(unittest.IsolatedAsyncioTestCase):
+class TestBrainHookAuth(unittest.IsolatedAsyncioTestCase):
     """handle_hook_connection authenticates before processing hook events."""
 
     # Correct token used across all hook auth tests
-    _TOKEN = "voice-secret-xyz"
+    _TOKEN = "hook-secret-xyz"
 
     def _make_reader_writer(self, raw_bytes: bytes):
         """Return (reader, writer, written_list) with raw_bytes queued in reader."""
@@ -278,7 +348,8 @@ class TestBrainVoiceAuth(unittest.IsolatedAsyncioTestCase):
         written: list[bytes] = []
         transport = MagicMock()
         protocol = MagicMock()
-        writer = asyncio.StreamWriter(transport, protocol, reader, asyncio.get_event_loop())
+        loop = asyncio.get_event_loop()
+        writer = asyncio.StreamWriter(transport, protocol, reader, loop)
         writer.write = lambda data: written.append(data)
         writer.drain = AsyncMock()
         writer.close = MagicMock()
@@ -290,12 +361,13 @@ class TestBrainVoiceAuth(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": self._TOKEN}):
             importlib.reload(cyrus_config)
 
-            raw = (
-                json.dumps(
-                    {"event": "stop", "text": "hi", "cwd": "/proj", "token": self._TOKEN}
-                ).encode()
-                + b"\n"
-            )
+            msg = {
+                "event": "stop",
+                "text": "hi",
+                "cwd": "/proj",
+                "token": self._TOKEN,
+            }
+            raw = json.dumps(msg).encode() + b"\n"
             reader, writer, written = self._make_reader_writer(raw)
 
             session_mgr = MagicMock()
@@ -315,12 +387,13 @@ class TestBrainVoiceAuth(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": self._TOKEN}):
             importlib.reload(cyrus_config)
 
-            raw = (
-                json.dumps(
-                    {"event": "stop", "text": "hi", "cwd": "/proj", "token": "wrong-token"}
-                ).encode()
-                + b"\n"
-            )
+            msg = {
+                "event": "stop",
+                "text": "hi",
+                "cwd": "/proj",
+                "token": "wrong-token",
+            }
+            raw = json.dumps(msg).encode() + b"\n"
             reader, writer, written = self._make_reader_writer(raw)
             session_mgr = MagicMock()
 
@@ -348,6 +421,98 @@ class TestBrainVoiceAuth(unittest.IsolatedAsyncioTestCase):
             writer.close.assert_called()
 
 
+# -- Brain: voice auth tests ---------------------------------------------------
+
+
+class TestBrainVoiceAuth(unittest.IsolatedAsyncioTestCase):
+    """handle_voice_connection authenticates voice clients via first message."""
+
+    _TOKEN = "voice-secret-xyz"
+
+    def _make_reader_writer(self, raw_bytes: bytes):
+        """Return (reader, writer, written_list) with raw_bytes queued in reader."""
+        reader = asyncio.StreamReader()
+        reader.feed_data(raw_bytes)
+        reader.feed_eof()
+
+        written: list[bytes] = []
+        transport = MagicMock()
+        protocol = MagicMock()
+        loop = asyncio.get_event_loop()
+        writer = asyncio.StreamWriter(transport, protocol, reader, loop)
+        writer.write = lambda data: written.append(data)
+        writer.drain = AsyncMock()
+        writer.close = MagicMock()
+        writer.wait_closed = AsyncMock()
+        return reader, writer, written
+
+    async def test_brain_voice_accepts_correct_token(self) -> None:
+        """AC: handle_voice_connection proceeds when voice sends correct token."""
+        with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": self._TOKEN}):
+            importlib.reload(cyrus_config)
+
+            auth_msg = json.dumps({"type": "auth", "token": self._TOKEN}) + "\n"
+            reader, writer, written = self._make_reader_writer(auth_msg.encode())
+
+            session_mgr = MagicMock()
+            session_mgr._chat_watchers = {}
+            session_mgr._perm_watchers = {}
+            loop = asyncio.get_event_loop()
+
+            # Patch _vs_code_windows and _send to avoid Windows UIA calls
+            with (
+                patch.object(cyrus_brain, "_vs_code_windows", return_value=[]),
+                patch.object(cyrus_brain, "_send", new_callable=AsyncMock),
+                patch.object(cyrus_brain, "_voice_lock", asyncio.Lock()),
+            ):
+                await cyrus_brain.handle_voice_connection(
+                    reader, writer, session_mgr, loop
+                )
+
+            # Should NOT have written an unauthorized error
+            all_written = b"".join(written)
+            self.assertNotIn(b'"error"', all_written)
+            # Should have written auth_ok response (protocol spec)
+            self.assertIn(b"auth_ok", all_written)
+
+    async def test_brain_voice_rejects_wrong_token(self) -> None:
+        """AC: handle_voice_connection disconnects voice client with wrong token."""
+        with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": self._TOKEN}):
+            importlib.reload(cyrus_config)
+
+            auth_msg = json.dumps({"type": "auth", "token": "wrong-token"}) + "\n"
+            reader, writer, written = self._make_reader_writer(auth_msg.encode())
+
+            session_mgr = MagicMock()
+            loop = asyncio.get_event_loop()
+
+            await cyrus_brain.handle_voice_connection(reader, writer, session_mgr, loop)
+
+            # Should have written an unauthorized error and closed
+            all_written = b"".join(written)
+            self.assertIn(b"unauthorized", all_written)
+            writer.close.assert_called()
+
+    async def test_brain_voice_rejects_no_token(self) -> None:
+        """AC: handle_voice_connection disconnects voice client that sends no token."""
+        with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": self._TOKEN}):
+            importlib.reload(cyrus_config)
+
+            # Send a message without a token field
+            auth_msg = json.dumps({"type": "auth"}) + "\n"
+            reader, writer, written = self._make_reader_writer(auth_msg.encode())
+
+            session_mgr = MagicMock()
+            loop = asyncio.get_event_loop()
+
+            await cyrus_brain.handle_voice_connection(reader, writer, session_mgr, loop)
+
+            # Should have written an unauthorized error and closed
+            all_written = b"".join(written)
+            self.assertIn(b"unauthorized", all_written)
+            writer.close.assert_called()
+
+
 # -- Brain: mobile auth tests --------------------------------------------------
 
 
@@ -357,70 +522,78 @@ class TestBrainMobileAuth(unittest.IsolatedAsyncioTestCase):
     _TOKEN = "mobile-secret-xyz"
 
     async def test_brain_mobile_accepts_correct_token(self) -> None:
-        """AC: handle_mobile_ws adds client to set after correct token auth."""
+        """AC: handle_mobile_ws sends auth_ok and proceeds after correct token auth."""
         with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": self._TOKEN}):
             importlib.reload(cyrus_config)
 
+            # handle_mobile_ws uses ws.recv() (wrapped in asyncio.wait_for) for
+            # the auth step, then async-iterates for subsequent messages.
             auth_msg = json.dumps({"type": "auth", "token": self._TOKEN})
-
-            messages: list[str] = [auth_msg]
-
-            class FakeWS:
-                remote_address = ("127.0.0.1", 12345)
-                close_code = 1000
-                close_reason = ""
-
-                def __aiter__(self):
-                    return self
-
-                async def __anext__(self):
-                    if messages:
-                        return messages.pop(0)
-                    raise StopAsyncIteration
-
-                async def send(self, data):
-                    pass
-
-            ws = FakeWS()
-            # Clear mobile clients set
-            original_clients = cyrus_brain._mobile_clients.copy()
-            cyrus_brain._mobile_clients.clear()
-
-            await cyrus_brain.handle_mobile_ws(ws)
-            # After auth + disconnect, the ws should have been added (then removed on disconnect)
-            # The key check: no exception raised, connection attempted
-            # (client gets added then removed on StopAsyncIteration)
-            cyrus_brain._mobile_clients.update(original_clients)
-
-    async def test_brain_mobile_rejects_wrong_token(self) -> None:
-        """AC: handle_mobile_ws closes connection when first message has wrong token."""
-        with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": self._TOKEN}):
-            importlib.reload(cyrus_config)
-
-            auth_msg = json.dumps({"type": "auth", "token": "wrong-token"})
             messages_sent: list[str] = []
 
             class FakeWS:
                 remote_address = ("127.0.0.1", 12345)
                 close_code = 1000
                 close_reason = ""
-                closed = False
-                _msg_yielded = False
+
+                async def recv(self):
+                    """Return auth message for the initial handshake."""
+                    return auth_msg
 
                 def __aiter__(self):
                     return self
 
                 async def __anext__(self):
-                    # Yield auth_msg only once; handler should return before reaching here again
-                    if not self._msg_yielded:
-                        self._msg_yielded = True
-                        return auth_msg
+                    # No further messages after auth — exit the post-auth loop
                     raise StopAsyncIteration
 
-                async def send(self, data):
+                async def send(self, data: str) -> None:
                     messages_sent.append(data)
 
-                async def close(self):
+                async def close(self) -> None:
+                    pass
+
+            ws = FakeWS()
+            original_clients = cyrus_brain._mobile_clients.copy()
+            cyrus_brain._mobile_clients.clear()
+
+            await cyrus_brain.handle_mobile_ws(ws)
+            cyrus_brain._mobile_clients.update(original_clients)
+
+            # auth_ok must be sent on successful auth (protocol spec, AC3)
+            self.assertIn(
+                json.dumps({"type": "auth_ok"}),
+                messages_sent,
+                "handle_mobile_ws must send auth_ok on successful auth",
+            )
+
+    async def test_brain_mobile_rejects_wrong_token(self) -> None:
+        """AC: handle_mobile_ws closes connection when first message has wrong token."""
+        with patch.dict(os.environ, {"CYRUS_AUTH_TOKEN": self._TOKEN}):
+            importlib.reload(cyrus_config)
+
+            # Provide the wrong token via recv() — handler rejects before any loop
+            auth_msg = json.dumps({"type": "auth", "token": "wrong-token"})
+            messages_sent: list[str] = []
+
+            class FakeWS:
+                remote_address = ("127.0.0.1", 12345)
+                closed = False
+
+                async def recv(self):
+                    """Return wrong-token message for the initial handshake."""
+                    return auth_msg
+
+                def __aiter__(self):
+                    return self
+
+                async def __anext__(self):
+                    raise StopAsyncIteration
+
+                async def send(self, data: str) -> None:
+                    messages_sent.append(data)
+
+                async def close(self) -> None:
                     self.closed = True
 
             ws = FakeWS()
@@ -430,6 +603,12 @@ class TestBrainMobileAuth(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(
                 ws.closed,
                 "handle_mobile_ws must close WebSocket on wrong token",
+            )
+            # Must have sent generic error (not exposing the actual token)
+            self.assertIn(
+                json.dumps({"error": "unauthorized"}),
+                messages_sent,
+                "handle_mobile_ws must send unauthorized error on wrong token",
             )
 
 
@@ -462,7 +641,11 @@ class TestTokenMismatchLogging(unittest.TestCase):
             for line in source.splitlines()
             if ("log." in line and "auth" in line.lower())
             or ("log." in line and "unauthorized" in line.lower())
-            or ("log." in line and "token" in line.lower() and "mismatch" in line.lower())
+            or (
+                "log." in line
+                and "token" in line.lower()
+                and "mismatch" in line.lower()
+            )
         ]
         for line in log_lines:
             self.assertNotIn(

@@ -8,11 +8,11 @@ split_count=3
 force_split=false
 needs_interview=false
 verify_count=0
-total_input_tokens=488617
-total_output_tokens=116
-total_duration_seconds=2319
-total_iterations=72
-run_count=70
+total_input_tokens=1887292
+total_output_tokens=414
+total_duration_seconds=9851
+total_iterations=79
+run_count=77
 ---
 
 # Issue 028: Add TCP Authentication
@@ -784,5 +784,71 @@ Add shared-secret token authentication to all TCP server ports (8766, 8767, 8769
 - **Input tokens:** 0 (final context: 0)
 - **Output tokens:** 0
 - **Iterations:** 1
+- **Model:** claude-sonnet-4-6
+- **Trigger:** auto/build
+
+### SPLIT — 2026-03-18 02:34:24Z
+
+- **From:** SPLIT
+- **Duration in stage:** 1227s
+- **Input tokens:** 187,599 (final context: 37,148)
+- **Output tokens:** 44
+- **Iterations:** 0
+- **Context used:** 19%
+- **Model:** claude-sonnet-4-6
+- **Trigger:** auto/build
+
+### SPLIT — 2026-03-18 02:34:25Z
+
+- **From:** SPLIT
+- **Duration in stage:** 953s
+- **Input tokens:** 240,012 (final context: 86,798)
+- **Output tokens:** 50
+- **Iterations:** 2
+- **Context used:** 43%
+- **Model:** claude-opus-4-6
+- **Trigger:** auto/build
+
+### SPLIT — 2026-03-18 02:34:35Z
+
+- **From:** SPLIT
+- **Duration in stage:** 1167s
+- **Input tokens:** 255,387 (final context: 99,324)
+- **Output tokens:** 51
+- **Iterations:** 2
+- **Context used:** 50%
+- **Model:** claude-opus-4-6
+- **Trigger:** auto/build
+
+### SPLIT — 2026-03-18 02:34:45Z
+
+- **From:** SPLIT
+- **Duration in stage:** 1238s
+- **Input tokens:** 193,874 (final context: 38,254)
+- **Output tokens:** 35
+- **Iterations:** 0
+- **Context used:** 19%
+- **Model:** claude-sonnet-4-6
+- **Trigger:** auto/build
+
+### SPLIT — 2026-03-18 02:34:46Z
+
+- **From:** SPLIT
+- **Duration in stage:** 617s
+- **Input tokens:** 143,663 (final context: 143,663)
+- **Output tokens:** 24
+- **Iterations:** 1
+- **Context used:** 72%
+- **Model:** claude-sonnet-4-6
+- **Trigger:** auto/build
+
+### SPLIT — 2026-03-18 02:35:15Z
+
+- **From:** SPLIT
+- **Duration in stage:** 1279s
+- **Input tokens:** 190,541 (final context: 40,234)
+- **Output tokens:** 50
+- **Iterations:** 0
+- **Context used:** 20%
 - **Model:** claude-sonnet-4-6
 - **Trigger:** auto/build

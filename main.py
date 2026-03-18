@@ -394,7 +394,7 @@ def _execute_cyrus_command(ctype: str, cmd: dict, spoken: str,
         with _project_locked_lock:
             _project_locked = False
         spoken = spoken or "Following window focus."
-        print(f"[Cyrus] Routing unlocked.")
+        print("[Cyrus] Routing unlocked.")
 
     elif ctype == "which_project":
         with _active_project_lock:
@@ -611,7 +611,8 @@ class ChatWatcher:
     def start(self, tts_queue, loop: asyncio.AbstractEventLoop,
               is_active_fn=None):
         if is_active_fn is None:
-            is_active_fn = lambda: True
+            def is_active_fn() -> bool:
+                return True
 
         def poll():
             while self._chat_doc is None:
@@ -1043,7 +1044,7 @@ class SessionManager:
         if self.multi_session:
             names = " | ".join(f'"{a}"' for a in self._aliases)
             print(f'[Cyrus] {len(self._chat_watchers)} sessions: {names}')
-            print(f'[Cyrus] Say "Cyrus, switch to [name]" to lock routing.')
+            print('[Cyrus] Say "Cyrus, switch to [name]" to lock routing.')
 
         threading.Thread(target=scan, daemon=True).start()
 
@@ -1373,7 +1374,9 @@ async def _speak_kokoro(text: str) -> None:
 
 async def _speak_edge(text: str) -> None:
     """Edge TTS fallback — requires network + ffmpeg. Used when Kokoro is not loaded."""
-    import subprocess, tempfile, edge_tts
+    import subprocess
+    import tempfile
+    import edge_tts
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
         tmp_path = f.name
     try:
@@ -1551,7 +1554,7 @@ async def main() -> None:
     keyboard.add_hotkey(KEY_STOP,      stop_speech)
     keyboard.add_hotkey(KEY_READ_CLIP, read_clipboard)
 
-    print(f"[Cyrus] F9 pause  |  F7 stop+clear  |  F8 clipboard  |  Ctrl+C exit")
+    print("[Cyrus] F9 pause  |  F7 stop+clear  |  F8 clipboard  |  Ctrl+C exit")
 
     # Interactive startup — verify, greet, detect sessions, assign names
     await startup_sequence(session_mgr)

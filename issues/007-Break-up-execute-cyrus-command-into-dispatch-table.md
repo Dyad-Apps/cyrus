@@ -1,13 +1,14 @@
 ---
 id=007-Break-up-execute-cyrus-command-into-dispatch-table
 title=Issue 007: Break up execute_cyrus_command into dispatch table
-state=BUILT
+state=STUCK
 parent=
 children=045,046
 split_count=0
 force_split=false
 needs_interview=false
-verify_count=1
+verify_count=3
+verify_exhausted=true
 total_input_tokens=579535
 total_output_tokens=199
 total_duration_seconds=2984
@@ -846,3 +847,7 @@ Critical
 - **Context used:** 23%
 - **Model:** claude-sonnet-4-6
 - **Trigger:** auto/build
+
+<!-- root-cause:067 -->
+
+<!-- root-cause:068 -->

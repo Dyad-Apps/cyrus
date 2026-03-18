@@ -200,7 +200,10 @@ class TestSocketCommunication:
 
         Verifies that:
         - ``sendall`` is called exactly once.
-        - The payload is ``json.dumps({"text": text}) + "\\n"`` encoded as UTF-8.
+        - The payload contains the ``text`` key with the correct value.
+        - The payload contains the ``token`` key for companion auth (port 8770
+          validates the shared-secret token per Issue 028 acceptance criteria).
+        - The line is terminated with a newline byte.
         """
         text = "run the tests"
 
@@ -215,7 +218,10 @@ class TestSocketCommunication:
         sent_bytes: bytes = mock_socket.sendall.call_args[0][0]
         assert sent_bytes.endswith(b"\n"), "Payload must end with a newline byte"
         sent_dict = json.loads(sent_bytes.decode("utf-8").strip())
-        assert sent_dict == {"text": text}, "Payload must be the JSON-encoded text dict"
+        assert sent_dict["text"] == text, "Payload must contain the correct text value"
+        # Issue 028: companion extension (port 8770) validates the auth token.
+        # The brain includes the token so the extension can authenticate the sender.
+        assert "token" in sent_dict, "Payload must include auth token for companion"
 
     def test_successful_extension_response_returns_true(
         self, mock_socket: MagicMock

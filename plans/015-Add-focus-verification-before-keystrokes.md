@@ -106,9 +106,9 @@
 
 ## Validation (Backpressure)
 
-- Lint: `cyrus2/.venv/bin/python -m ruff check cyrus2/`
-- Format: `cyrus2/.venv/bin/python -m ruff format --check cyrus2/`
-- Tests: `cyrus2/.venv/bin/python -m pytest cyrus2/tests/`
+- Lint: `BUILD_COMMAND`
+- Format: `CHECK_COMMAND`
+- Tests: `TEST_COMMAND`
 - All existing tests must continue to pass
 - New test file `test_015_focus_verification.py` must have 100% pass rate
 

@@ -18,22 +18,21 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-# HOOK_PORT is imported from cyrus_config so it can be overridden via
-# the CYRUS_HOOK_PORT environment variable without modifying this file.
+# HOOK_PORT and AUTH_TOKEN are imported from cyrus_config so they pick up the
+# auto-generation logic (CYRUS_AUTH_TOKEN env var, or secrets.token_hex fallback)
+# without duplicating it here.
 try:
+    from cyrus_config import AUTH_TOKEN
     from cyrus_config import HOOK_PORT as BRAIN_PORT
 except (ImportError, ValueError):
     # Fallback if cyrus_config is unavailable or misconfigured — never block Claude
     BRAIN_PORT = 8767
+    AUTH_TOKEN = os.environ.get("CYRUS_AUTH_TOKEN", "")
 
-# Read AUTH_TOKEN directly from the environment at module load time so that
-# reloading this module picks up the current value without requiring a separate
-# cyrus_config reload.  Never block Claude if the var is absent — just send an
-# empty token (the brain will reject the connection, which is the correct behaviour
-# when the operator has not configured CYRUS_AUTH_TOKEN).
-AUTH_TOKEN: str = os.environ.get("CYRUS_AUTH_TOKEN", "")
-
-BRAIN_HOST = "localhost"
+# Read brain host from env var so Docker deployments can point the hook at a
+# containerised brain without changing code.  Defaults to "localhost" for
+# backward-compatibility with single-machine setups.
+BRAIN_HOST = os.environ.get("CYRUS_BRAIN_HOST", "localhost")
 
 
 def _send(msg: dict) -> None:

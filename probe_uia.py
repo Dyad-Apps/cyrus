@@ -75,7 +75,7 @@ def main():
     print("Strategy 1: Chrome render widget → DocumentControls...")
     chrome = vscode.PaneControl(searchDepth=12, ClassName="Chrome_RenderWidgetHostHWND")
     if chrome.Exists(3):
-        print(f"  Chrome render widget found.\n")
+        print("  Chrome render widget found.\n")
 
         # Find all DocumentControls inside Chrome widget
         docs = []

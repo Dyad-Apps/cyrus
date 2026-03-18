@@ -1,18 +1,18 @@
 ---
 id=028-Add-TCP-authentication-2
 title=Add auth validation to all brain server connection handlers
-state=GROOMED
+state=STUCK
 parent=028-Add-TCP-authentication
 children=
 split_count=0
 force_split=false
 needs_interview=false
-verify_count=0
-total_input_tokens=64644
-total_output_tokens=4
-total_duration_seconds=58
-total_iterations=1
-run_count=1
+verify_count=1
+total_input_tokens=273119
+total_output_tokens=81
+total_duration_seconds=786
+total_iterations=4
+run_count=4
 ---
 
 # Add auth validation to all brain server connection handlers
@@ -29,12 +29,12 @@ Unauthorized clients must be disconnected immediately with a generic error; mism
 logged (not exposed to the client).
 
 ## Acceptance Criteria
-- [ ] `handle_voice_connection` (port 8766): reads first message as JSON, expects `{"type": "auth", "token": "..."}`, disconnects with `{"error": "unauthorized"}` on missing/wrong token
-- [ ] `handle_hook_connection` (port 8767): reads single JSON message, expects `"token"` key, disconnects with `{"error": "unauthorized"}` on missing/wrong token
-- [ ] `handle_mobile_ws` (port 8769): reads first WebSocket message as JSON, expects `{"type": "auth", "token": "..."}`, disconnects with `{"error": "unauthorized"}` on missing/wrong token
-- [ ] Token mismatch is logged at WARNING level (masked, not verbatim), not exposed in error response
-- [ ] Authorized connections proceed normally after auth
-- [ ] `uv run ruff check .` passes
+- [x] `handle_voice_connection` (port 8766): reads first message as JSON, expects `{"type": "auth", "token": "..."}`, disconnects with `{"error": "unauthorized"}` on missing/wrong token
+- [x] `handle_hook_connection` (port 8767): reads single JSON message, expects `"token"` key, disconnects with `{"error": "unauthorized"}` on missing/wrong token
+- [x] `handle_mobile_ws` (port 8769): reads first WebSocket message as JSON, expects `{"type": "auth", "token": "..."}`, disconnects with `{"error": "unauthorized"}` on missing/wrong token
+- [x] Token mismatch is logged at WARNING level (masked, not verbatim), not exposed in error response
+- [x] Authorized connections proceed normally after auth
+- [x] `uv run ruff check .` passes
 
 ## Auth Protocol
 
@@ -99,3 +99,38 @@ After implementing, run `uv run pytest cyrus2/tests/` to check for regressions.
 - **Iterations:** 1
 - **Model:** claude-haiku-4-5-20251001
 - **Trigger:** auto/triage
+
+### PLANNED — 2026-03-18 02:34:04Z
+
+- **From:** PLANNED
+- **Duration in stage:** 280s
+- **Input tokens:** 98,088 (final context: 98,088)
+- **Output tokens:** 25
+- **Iterations:** 1
+- **Context used:** 49%
+- **Model:** claude-opus-4-6
+- **Trigger:** auto/plan
+
+### PLANNED — 2026-03-18 02:34:32Z
+
+- **From:** PLANNED
+- **Duration in stage:** 120s
+- **Input tokens:** 35,664 (final context: 35,664)
+- **Output tokens:** 26
+- **Iterations:** 1
+- **Context used:** 18%
+- **Model:** claude-opus-4-6
+- **Trigger:** auto/plan
+
+<!-- root-cause:072 -->
+
+### STUCK — 2026-03-18 15:14:27Z
+
+- **From:** STUCK
+- **Duration in stage:** 328s
+- **Input tokens:** 74,723 (final context: 74,723)
+- **Output tokens:** 26
+- **Iterations:** 1
+- **Context used:** 37%
+- **Model:** claude-sonnet-4-6
+- **Trigger:** auto/build

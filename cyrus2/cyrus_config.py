@@ -72,9 +72,7 @@ MIN_SPEECH_DURATION: int = int(os.environ.get("CYRUS_MIN_SPEECH_DURATION", "500"
 # Intervals (in seconds) for the background threads that watch the VS Code UI.
 
 # How often ChatWatcher polls the Claude Code chat output pane for new text
-CHAT_WATCHER_POLL_INTERVAL: float = float(
-    os.environ.get("CYRUS_CHAT_POLL_MS", "0.5")
-)
+CHAT_WATCHER_POLL_INTERVAL: float = float(os.environ.get("CYRUS_CHAT_POLL_MS", "0.5"))
 
 # How often PermissionWatcher polls for Claude Code permission dialogs
 PERMISSION_WATCHER_POLL_INTERVAL: float = float(
@@ -105,7 +103,7 @@ if not AUTH_TOKEN:
     )
     print(
         "      Set CYRUS_AUTH_TOKEN in .env or shell. Generate with: "
-        "python -c \"import secrets; print(secrets.token_hex(16))\"",
+        'python -c "import secrets; print(secrets.token_hex(16))"',
         file=sys.stderr,
     )
 

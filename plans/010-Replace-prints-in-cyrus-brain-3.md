@@ -16,10 +16,10 @@
 ## Verification Steps
 
 - [x] `grep -c "logging\.\(debug\|info\|warning\|error\|exception\)" cyrus2/cyrus_brain.py` → 0
-- [x] `cyrus2/.venv/bin/python -m ruff check cyrus2/cyrus_brain.py` passes
-- [x] `cyrus2/.venv/bin/python -m ruff format --check cyrus2/cyrus_brain.py` passes
-- [x] `cyrus2/.venv/bin/python -m pytest cyrus2/tests/test_010_print_replacement.py::TestNoRootLoggerCalls -v` passes
-- [x] `cyrus2/.venv/bin/python -m pytest cyrus2/tests/ -v` — full suite passes (648 passed)
+- [x] `BUILD_COMMANDcyrus_brain.py` passes
+- [x] `CHECK_COMMANDcyrus_brain.py` passes
+- [x] `TEST_COMMANDtest_010_print_replacement.py::TestNoRootLoggerCalls -v` passes
+- [x] `TEST_COMMAND -v` — full suite passes (648 passed)
 
 ## Minor Fixes Needed
 

@@ -261,8 +261,13 @@ class TestConfigEdgeCases(unittest.TestCase):
 
     def test_port_types_are_int(self) -> None:
         """All port constants must be Python int (not str or float)."""
-        for attr in ("BRAIN_PORT", "HOOK_PORT", "MOBILE_PORT", "COMPANION_PORT",
-                     "SERVER_PORT"):
+        for attr in (
+            "BRAIN_PORT",
+            "HOOK_PORT",
+            "MOBILE_PORT",
+            "COMPANION_PORT",
+            "SERVER_PORT",
+        ):
             val = getattr(cyrus_config, attr)
             self.assertIsInstance(
                 val,
@@ -334,6 +339,8 @@ class TestEnvExample(unittest.TestCase):
         "CYRUS_CHAT_POLL_MS",
         "CYRUS_PERMISSION_POLL_MS",
         "CYRUS_MAX_SPEECH_WORDS",
+        # Issue 028-1: authentication token
+        "CYRUS_AUTH_TOKEN",
     ]
 
     def test_env_example_exists(self) -> None:
@@ -391,6 +398,9 @@ class TestModuleInterface(unittest.TestCase):
         "CHAT_WATCHER_POLL_INTERVAL",
         "PERMISSION_WATCHER_POLL_INTERVAL",
         "MAX_SPEECH_WORDS",
+        # Issue 028-1: authentication token constant and helper
+        "AUTH_TOKEN",
+        "validate_auth_token",
     ]
 
     def test_module_exposes_all_required_constants(self) -> None:
@@ -436,6 +446,128 @@ class TestModuleInterface(unittest.TestCase):
                 source,
                 f"cyrus_config.py must not import hardware package: {pkg!r}",
             )
+
+
+# ── AUTH_TOKEN infrastructure tests (Issue 028-1) ────────────────────────────
+
+
+class TestAuthToken(unittest.TestCase):
+    """Acceptance-driven tests for the AUTH_TOKEN infrastructure (issue 028-1).
+
+    These tests verify:
+      - AUTH_TOKEN is a non-empty string when CYRUS_AUTH_TOKEN is set
+      - AUTH_TOKEN is auto-generated (non-empty) when env var is absent
+      - validate_auth_token() returns True for a matching token
+      - validate_auth_token() returns False for a non-matching token
+      - validate_auth_token() uses constant-time comparison (hmac.compare_digest)
+    """
+
+    def tearDown(self) -> None:
+        """Restore clean module state after each test."""
+        for key in list(os.environ.keys()):
+            if key.startswith("CYRUS_"):
+                del os.environ[key]
+        importlib.reload(cyrus_config)
+
+    # ── AC: AUTH_TOKEN reads from env var ──────────────────────────────────────
+
+    def test_auth_token_reads_from_env_var(self) -> None:
+        """CYRUS_AUTH_TOKEN env var must be reflected in AUTH_TOKEN constant."""
+        expected = "deadbeefcafe1234deadbeefcafe1234"
+        mod = _reload_with_env(CYRUS_AUTH_TOKEN=expected)
+        self.assertEqual(mod.AUTH_TOKEN, expected)
+
+    def test_auth_token_is_string(self) -> None:
+        """AUTH_TOKEN must be a str, not bytes or None."""
+        mod = _reload_with_env(CYRUS_AUTH_TOKEN="sometoken")
+        self.assertIsInstance(mod.AUTH_TOKEN, str)
+
+    # ── AC: auto-generate when env var absent ─────────────────────────────────
+
+    def test_auth_token_auto_generated_when_unset(self) -> None:
+        """AUTH_TOKEN must be a non-empty hex string when CYRUS_AUTH_TOKEN is absent."""
+        # Remove env var if present so we force auto-generation
+        os.environ.pop("CYRUS_AUTH_TOKEN", None)
+        mod = importlib.reload(cyrus_config)
+        self.assertIsInstance(mod.AUTH_TOKEN, str)
+        self.assertTrue(
+            len(mod.AUTH_TOKEN) > 0,
+            "Auto-generated AUTH_TOKEN must not be empty",
+        )
+        # secrets.token_hex(16) produces 32 hex characters
+        self.assertEqual(len(mod.AUTH_TOKEN), 32)
+        self.assertTrue(
+            all(c in "0123456789abcdef" for c in mod.AUTH_TOKEN),
+            "Auto-generated AUTH_TOKEN must be lowercase hexadecimal",
+        )
+
+    def test_auth_token_warn_printed_to_stderr_when_unset(self) -> None:
+        """A WARN message must be written to stderr when AUTH_TOKEN auto-generated."""
+        import io
+
+        os.environ.pop("CYRUS_AUTH_TOKEN", None)
+        stderr_capture = io.StringIO()
+        with patch("sys.stderr", stderr_capture):
+            importlib.reload(cyrus_config)
+        output = stderr_capture.getvalue()
+        self.assertIn(
+            "WARN",
+            output,
+            "WARN prefix must appear in stderr when token auto-generated",
+        )
+        self.assertIn(
+            "CYRUS_AUTH_TOKEN",
+            output,
+            "Stderr must mention CYRUS_AUTH_TOKEN var name",
+        )
+
+    # ── AC: validate_auth_token() helper ──────────────────────────────────────
+
+    def test_validate_auth_token_returns_true_for_correct_token(self) -> None:
+        """validate_auth_token(correct_token) must return True."""
+        token = "abc123def456abc123def456abc12345"
+        mod = _reload_with_env(CYRUS_AUTH_TOKEN=token)
+        self.assertTrue(mod.validate_auth_token(token))
+
+    def test_validate_auth_token_returns_false_for_wrong_token(self) -> None:
+        """validate_auth_token(wrong_token) must return False."""
+        mod = _reload_with_env(CYRUS_AUTH_TOKEN="correct_token_abc123")
+        self.assertFalse(mod.validate_auth_token("wrong_token_xyz789"))
+
+    def test_validate_auth_token_returns_false_for_empty_string(self) -> None:
+        """validate_auth_token('') must return False when AUTH_TOKEN is non-empty."""
+        mod = _reload_with_env(CYRUS_AUTH_TOKEN="sometoken123")
+        self.assertFalse(mod.validate_auth_token(""))
+
+    def test_validate_auth_token_returns_false_for_partial_match(self) -> None:
+        """validate_auth_token() must reject a prefix of the correct token."""
+        full_token = "deadbeefcafe1234deadbeefcafe1234"
+        mod = _reload_with_env(CYRUS_AUTH_TOKEN=full_token)
+        self.assertFalse(mod.validate_auth_token(full_token[:16]))
+
+    def test_validate_auth_token_uses_hmac_compare_digest(self) -> None:
+        """validate_auth_token() must call hmac.compare_digest (constant-time)."""
+        mod = _reload_with_env(CYRUS_AUTH_TOKEN="sometoken")
+        import inspect
+
+        source = inspect.getsource(mod.validate_auth_token)
+        self.assertIn(
+            "hmac.compare_digest",
+            source,
+            "validate_auth_token must use hmac.compare_digest for constant-time cmp",
+        )
+
+    def test_validate_auth_token_signature(self) -> None:
+        """validate_auth_token must accept exactly one str arg and return bool."""
+        import inspect
+
+        mod = _reload_with_env(CYRUS_AUTH_TOKEN="tok")
+        sig = inspect.signature(mod.validate_auth_token)
+        params = list(sig.parameters.values())
+        self.assertEqual(
+            len(params), 1, "validate_auth_token must have exactly one parameter"
+        )
+        self.assertEqual(params[0].name, "received")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

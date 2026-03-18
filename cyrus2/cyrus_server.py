@@ -203,7 +203,9 @@ def main() -> None:
         "--host", default="0.0.0.0", help="Interface to bind (default: 0.0.0.0)"
     )
     parser.add_argument(
-        "--port", type=int, default=SERVER_PORT,
+        "--port",
+        type=int,
+        default=SERVER_PORT,
         help="Port to listen on (default: 8765)",
     )
     args = parser.parse_args()

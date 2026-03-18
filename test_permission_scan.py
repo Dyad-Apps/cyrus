@@ -64,7 +64,7 @@ def main():
     comtypes.CoInitializeEx()
     auto.uiautomation.SetGlobalSearchTimeout(2)
 
-    print(f"Looking for VS Code window...")
+    print("Looking for VS Code window...")
     vscode = auto.WindowControl(searchDepth=1, SubName=VSCODE_TITLE)
     if not vscode.Exists(3):
         print("ERROR: VS Code window not found.")
