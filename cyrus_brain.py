@@ -32,6 +32,7 @@ import time
 import argparse
 import queue as _stdlib_queue
 import socket
+from collections import deque
 from dataclasses import dataclass
 
 import websockets
@@ -40,9 +41,14 @@ import pyautogui
 import pyperclip
 import pygetwindow as gw
 
+# Logger must be initialized before the uiautomation import guard so that
+# the except blocks below can use it even if the import fails.
+log = logging.getLogger(__name__)
+
 try:
     import uiautomation as auto
 except Exception:
+    log.warning("uiautomation import failed, attempting cache clear", exc_info=True)
     # comtypes cache is likely corrupted — clear it and retry
     try:
         import comtypes.gen
@@ -61,12 +67,12 @@ except Exception:
         importlib.invalidate_caches()
         import uiautomation as auto
     except Exception as _e2:
-        print(
-            f"[Brain] FATAL: UIAutomation still unavailable after cache clear ({_e2})."
+        log.error(
+            "FATAL: UIAutomation still unavailable after cache clear",
+            exc_info=True,
         )
         print("[Brain] Try: pip install --force-reinstall comtypes uiautomation")
         raise
-from collections import deque
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -245,6 +251,7 @@ async def _send(msg: dict) -> None:
                 _voice_writer.write((json.dumps(msg) + "\n").encode())
                 await _voice_writer.drain()
         except Exception:
+            log.warning("Voice writer send failed", exc_info=True)
             _voice_writer = None
     # Broadcast to mobile WebSocket clients
     if _mobile_clients and msg.get("type") in (
@@ -263,6 +270,7 @@ async def _send(msg: dict) -> None:
             try:
                 await ws.send(payload)
             except Exception:
+                log.warning("Mobile WebSocket send failed", exc_info=True)
                 dead.add(ws)
         _mobile_clients.difference_update(dead)
 
@@ -294,6 +302,7 @@ async def _speak_urgent(text: str) -> None:
         try:
             _speak_queue.get_nowait()
         except Exception:
+            log.debug("Queue drain failed", exc_info=True)
             break
     await _send({"type": "stop_speech"})
     await _send({"type": "speak", "text": text, "project": ""})
@@ -525,11 +534,11 @@ def _execute_cyrus_command(
     """Execute a Cyrus command by looking it up in _COMMAND_HANDLERS."""
     global _active_project, _project_locked
 
-    logging.debug("Executing command '%s'", ctype)
+    log.debug("Executing command '%s'", ctype)
 
     handler = _COMMAND_HANDLERS.get(ctype)
     if not handler:
-        logging.warning("Unknown command type: '%s'", ctype)
+        log.warning("Unknown command type: '%s'", ctype)
         return
 
     # Snapshot _active_project under lock; handlers receive the value, not the lock
@@ -539,10 +548,10 @@ def _execute_cyrus_command(
     try:
         result = handler(cmd, spoken, session_mgr, loop, active_project)
     except Exception:
-        logging.exception("Error executing command '%s'", ctype)
+        log.exception("Error executing command '%s'", ctype)
         return
 
-    logging.info("Command '%s' completed", ctype)
+    log.info("Command '%s' completed", ctype)
 
     # Apply state mutations under their respective locks
     if result.new_active_project is not None:
@@ -633,14 +642,14 @@ class ChatWatcher:
                 if ctrl.ControlTypeName == "DocumentControl":
                     docs.append((d, ctrl))
             except Exception:
-                pass
+                log.debug("UIA operation failed", exc_info=True)
             try:
                 child = ctrl.GetFirstChildControl()
                 while child:
                     collect(child, d + 1)
                     child = child.GetNextSiblingControl()
             except Exception:
-                pass
+                log.debug("UIA operation failed", exc_info=True)
 
         collect(chrome)
         unnamed = [(d, c) for d, c in docs if not (c.Name or "").strip()]
@@ -659,14 +668,14 @@ class ChatWatcher:
             if len(name) >= 4:
                 out.append((depth, ctype, name))
         except Exception:
-            pass
+            log.debug("UIA operation failed", exc_info=True)
         try:
             child = ctrl.GetFirstChildControl()
             while child:
                 self._walk(child, depth + 1, max_depth, out)
                 child = child.GetNextSiblingControl()
         except Exception:
-            pass
+            log.debug("UIA operation failed", exc_info=True)
         return out
 
     def _extract_response(self, results):
@@ -749,8 +758,8 @@ class ChatWatcher:
                                     f"[Brain] {label}Chat input coords cached: "
                                     f"{_chat_input_coords.get(self.project_name)}"
                                 )
-                except Exception as e:
-                    print(f"[Brain] {label}Coords cache error: {e}")
+                except Exception:
+                    log.debug("Coords cache error for %s", self.project_name, exc_info=True)
 
             seed = ""
             for _ in range(6):
@@ -759,6 +768,7 @@ class ChatWatcher:
                     if seed:
                         break
                 except Exception:
+                    log.warning("Response extraction retry failed", exc_info=True)
                     seed = ""
                 time.sleep(1.0)
             self._last_spoken = seed
@@ -824,6 +834,7 @@ class ChatWatcher:
                                 )
 
                 except Exception:
+                    log.warning("Chat poll error; re-finding webview", exc_info=True)
                     self._chat_doc = None
                     while self._chat_doc is None:
                         self._chat_doc = self._find_webview()
@@ -907,14 +918,14 @@ class PermissionWatcher:
                 if ctrl.ControlTypeName == "DocumentControl":
                     docs.append((d, ctrl))
             except Exception:
-                pass
+                log.debug("UIA operation failed", exc_info=True)
             try:
                 child = ctrl.GetFirstChildControl()
                 while child:
                     collect(child, d + 1)
                     child = child.GetNextSiblingControl()
             except Exception:
-                pass
+                log.debug("UIA operation failed", exc_info=True)
 
         collect(chrome)
         unnamed = [(d, c) for d, c in docs if not (c.Name or "").strip()]
@@ -967,18 +978,19 @@ class PermissionWatcher:
                         if not aria_text:
                             aria_text = name
                 except Exception:
-                    pass
+                    log.debug("UIA operation failed", exc_info=True)
                 try:
                     child = ctrl.GetFirstChildControl()
                     while child:
                         walk(child, d + 1)
                         child = child.GetNextSiblingControl()
                 except Exception:
-                    pass
+                    log.debug("UIA operation failed", exc_info=True)
 
             walk(chrome)
             return aria_text, found_perm
         except Exception:
+            log.warning("Permission window scan failed", exc_info=True)
             return "", False
 
     def _scan(self):
@@ -995,14 +1007,14 @@ class PermissionWatcher:
                 if name:
                     items.append((d, ctype, name, ctrl))
             except Exception:
-                pass
+                log.debug("UIA operation failed", exc_info=True)
             try:
                 child = ctrl.GetFirstChildControl()
                 while child:
                     walk(child, d + 1)
                     child = child.GetNextSiblingControl()
             except Exception:
-                pass
+                log.debug("UIA operation failed", exc_info=True)
 
         walk(self._chat_doc)
 
@@ -1019,7 +1031,7 @@ class PermissionWatcher:
                                 (r.top + r.bottom) // 2,
                             )
                     except Exception:
-                        pass
+                        log.debug("Bounding rect read failed in scan", exc_info=True)
                     break
 
         # ── Permission detection: chat webview first, then VS Code window scan ─
@@ -1109,7 +1121,7 @@ class PermissionWatcher:
                     try:
                         vscode.SetFocus()
                     except Exception:
-                        pass
+                        log.debug("SetFocus failed on allow", exc_info=True)
                 pyautogui.press("1")
             else:
                 clicked = False
@@ -1117,7 +1129,7 @@ class PermissionWatcher:
                     self._allow_btn.Click()
                     clicked = True
                 except Exception:
-                    pass
+                    log.warning("Permission button click failed", exc_info=True)
                 if not clicked:
                     pyautogui.press("enter")
             self._pending = False
@@ -1130,7 +1142,7 @@ class PermissionWatcher:
                 try:
                     vscode.SetFocus()
                 except Exception:
-                    pass
+                    log.debug("SetFocus failed on deny", exc_info=True)
             pyautogui.press("escape")
             self._pending = False
             self._allow_btn = None
@@ -1163,8 +1175,8 @@ class PermissionWatcher:
                 time.sleep(0.05)
                 pyautogui.press("enter")
                 print(f"[Brain] → Prompt answered: {text!r}")
-            except Exception as e:
-                print(f"[Brain] Prompt input error: {e}")
+            except Exception:
+                log.error("Prompt input error", exc_info=True)
         self._prompt_pending = False
         self._prompt_input_ctrl = None
         return True
@@ -1258,6 +1270,7 @@ class PermissionWatcher:
                             self._prompt_input_ctrl = None
 
                 except Exception:
+                    log.warning("Permission poll error; re-finding webview", exc_info=True)
                     self._chat_doc = None
                     while self._chat_doc is None:
                         self._chat_doc = self._find_webview()
@@ -1333,14 +1346,14 @@ class SessionManager:
                         if proj not in self._chat_watchers:
                             self._add_session(proj, subname, loop)
                 except Exception:
-                    pass
+                    log.debug("Window discovery scan failed", exc_info=True)
                 time.sleep(5)
 
         try:
             for proj, subname in _vs_code_windows():
                 self._add_session(proj, subname, loop)
         except Exception:
-            pass
+            log.debug("Initial window discovery failed", exc_info=True)
 
         if self.multi_session:
             names = " | ".join(f'"{a}"' for a in self._aliases)
@@ -1369,7 +1382,7 @@ def _start_active_tracker(session_mgr: SessionManager, loop: asyncio.AbstractEve
                     print(f"[Brain] Active project: {proj}")
                     session_mgr.on_session_switch(proj, loop)
         except Exception:
-            pass
+            log.debug("Active window tracker failed", exc_info=True)
         time.sleep(0.5)
 
 
@@ -1398,14 +1411,14 @@ def _find_chat_input(target_subname: str = "") -> object:
             if ctrl.ControlTypeName == "EditControl":
                 found.append((d, ctrl))
         except Exception:
-            pass
+            log.debug("UIA operation failed", exc_info=True)
         try:
             child = ctrl.GetFirstChildControl()
             while child:
                 _walk(child, d + 1)
                 child = child.GetNextSiblingControl()
         except Exception:
-            pass
+            log.debug("UIA operation failed", exc_info=True)
 
     _walk(chrome)
     if not found:
@@ -1471,8 +1484,8 @@ def _submit_via_extension(text: str) -> bool:
     except (ConnectionRefusedError, OSError) as e:
         print(f"[Brain] Companion extension unavailable: {e}")
         return False
-    except Exception as e:
-        print(f"[Brain] Companion extension error: {e}")
+    except Exception:
+        log.error("Companion extension error", exc_info=True)
         return False
 
 
@@ -1509,7 +1522,7 @@ def _submit_to_vscode_impl(text: str) -> bool:
                     coords = ((r.left + r.right) // 2, (r.top + r.bottom) // 2)
                     _chat_input_coords[proj] = coords
             except Exception:
-                pass
+                log.debug("Chat input coord caching failed", exc_info=True)
         if not coords:
             print("[!] Claude chat input not found.")
             return False
@@ -1521,6 +1534,7 @@ def _submit_to_vscode_impl(text: str) -> bool:
             if VSCODE_TITLE not in (win.title or ""):
                 raise ValueError("wrong window")
         except Exception:
+            log.debug("Window cache invalid, clearing", exc_info=True)
             win = None
             _vscode_win_cache.pop(proj, None)
 
@@ -1542,7 +1556,7 @@ def _submit_to_vscode_impl(text: str) -> bool:
         win.activate()
         time.sleep(0.25)
     except Exception:
-        pass
+        log.debug("Window activation failed", exc_info=True)
 
     # ── 3. Click chat input by pixel coords ───────────────────────────────────
     pyautogui.click(*coords)
@@ -1553,7 +1567,7 @@ def _submit_to_vscode_impl(text: str) -> bool:
     try:
         saved = pyperclip.paste()
     except Exception:
-        pass
+        log.debug("Clipboard save failed", exc_info=True)
 
     pyperclip.copy(text)
     pyautogui.hotkey("ctrl", "v")
@@ -1562,7 +1576,7 @@ def _submit_to_vscode_impl(text: str) -> bool:
     try:
         win.activate()
     except Exception:
-        pass
+        log.debug("Window re-activation failed", exc_info=True)
     time.sleep(0.05)
     pyautogui.press("enter")
     time.sleep(0.05)
@@ -1570,7 +1584,7 @@ def _submit_to_vscode_impl(text: str) -> bool:
     try:
         pyperclip.copy(saved)
     except Exception:
-        pass
+        log.debug("Clipboard restore failed", exc_info=True)
 
     return True
 
@@ -1591,8 +1605,8 @@ def _submit_worker() -> None:
         text, ev, result_holder = _submit_request_queue.get()
         try:
             result_holder[0] = _submit_to_vscode_impl(text)
-        except Exception as e:
-            print(f"[Brain] Submit error: {e}")
+        except Exception:
+            log.error("Submit worker error", exc_info=True)
             result_holder[0] = False
         ev.set()
 
@@ -1630,8 +1644,8 @@ async def voice_reader(
 
         except json.JSONDecodeError:
             pass
-        except Exception as e:
-            print(f"[Brain] Voice reader error: {e}")
+        except Exception:
+            log.error("Voice reader error", exc_info=True)
             break
 
 
@@ -1656,8 +1670,8 @@ async def handle_mobile_ws(ws) -> None:
                     await ws.send(json.dumps({"type": "pong"}))
             except json.JSONDecodeError:
                 pass
-    except Exception as e:
-        print(f"[Brain] Mobile client error: {type(e).__name__}: {e}")
+    except Exception:
+        log.error("Mobile client error", exc_info=True)
     finally:
         _mobile_clients.discard(ws)
         print(
@@ -1927,14 +1941,14 @@ async def handle_hook_connection(
 
     except asyncio.TimeoutError:
         pass
-    except Exception as e:
-        print(f"[Brain] Hook handler error: {e}")
+    except Exception:
+        log.error("Hook handler error", exc_info=True)
     finally:
         try:
             writer.close()
             await writer.wait_closed()
         except Exception:
-            pass
+            log.debug("Hook writer cleanup failed", exc_info=True)
 
 
 # ── TCP server ─────────────────────────────────────────────────────────────────
@@ -1978,7 +1992,7 @@ async def handle_voice_connection(
             writer.close()
             await writer.wait_closed()
         except Exception:
-            pass
+            log.debug("Voice writer cleanup failed", exc_info=True)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
