@@ -8,23 +8,32 @@ Usage:
     python test_permission_scan.py
 """
 
-import comtypes
-import uiautomation as auto
+import logging
 import time
 
+import comtypes
+import uiautomation as auto
+
+log = logging.getLogger(__name__)
+
 VSCODE_TITLE = "Visual Studio Code"
+
 
 def walk_and_print(ctrl, d=0, max_depth=15, prefix=""):
     if d > max_depth:
         return
     try:
-        name  = (ctrl.Name  or "").strip()
+        name = (ctrl.Name or "").strip()
         ctype = ctrl.ControlTypeName or ""
-        cls   = ctrl.ClassName or ""
+        cls = ctrl.ClassName or ""
         if name or cls:
             marker = " *** ALLOW THIS ***" if "Allow this" in name else ""
-            marker = marker or (" *** YES ***" if name.lower() in ("yes", "1 yes", "yes, allow") else "")
-            marker = marker or (" *** PERMISSION ***" if "requesting permission" in name.lower() else "")
+            marker = marker or (
+                " *** YES ***" if name.lower() in ("yes", "1 yes", "yes, allow") else ""
+            )
+            marker = marker or (
+                " *** PERMISSION ***" if "requesting permission" in name.lower() else ""
+            )
             print(f"{'  ' * d}[{ctype}] name={name!r:50s} class={cls!r}{marker}")
     except Exception as e:
         print(f"{'  ' * d}<error: {e}>")
@@ -34,12 +43,14 @@ def walk_and_print(ctrl, d=0, max_depth=15, prefix=""):
             walk_and_print(child, d + 1, max_depth)
             child = child.GetNextSiblingControl()
     except Exception:
-        pass
+        # Child enumeration can fail if UIA tree mutates during walk
+        log.debug("Child control traversal failed", exc_info=True)
 
 
 def scan_chrome_panes(vscode):
     """Collect all Chrome_RenderWidgetHostHWND panes."""
     panes = []
+
     def collect(ctrl, d=0):
         if d > 20:
             return
@@ -48,14 +59,17 @@ def scan_chrome_panes(vscode):
                 panes.append(ctrl)
                 return  # don't recurse into Chrome panes
         except Exception:
-            pass
+            # ClassName property may be unavailable on transient controls
+            log.debug("ClassName check failed", exc_info=True)
         try:
             child = ctrl.GetFirstChildControl()
             while child:
                 collect(child, d + 1)
                 child = child.GetNextSiblingControl()
         except Exception:
-            pass
+            # Child enumeration can fail if UIA tree mutates
+            log.debug("Chrome pane child traversal failed", exc_info=True)
+
     collect(vscode)
     return panes
 

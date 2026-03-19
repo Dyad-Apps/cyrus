@@ -5,7 +5,11 @@ Uses uiautomation built-in search to find the webview, then walks
 deep inside it to read actual chat message text.
 """
 
+import logging
+
 import uiautomation as auto
+
+log = logging.getLogger(__name__)
 
 VSCODE_TITLE = "Visual Studio Code"
 
@@ -29,12 +33,14 @@ def walk_deep(control, depth=0, max_depth=25, results=None):
             if len(raw) > len(text):
                 text = raw
         except Exception:
-            pass
+            # TextPattern not supported on all control types — debug only
+            log.debug("TextPattern extraction failed", exc_info=True)
 
         if len(text) >= 6:
             results.append((depth, ctype, text))
     except Exception:
-        pass
+        # Control may be stale or inaccessible mid-traversal
+        log.debug("Control property read failed", exc_info=True)
 
     try:
         child = control.GetFirstChildControl()
@@ -42,7 +48,8 @@ def walk_deep(control, depth=0, max_depth=25, results=None):
             walk_deep(child, depth + 1, max_depth, results)
             child = child.GetNextSiblingControl()
     except Exception:
-        pass
+        # Child enumeration can fail if the UIA tree mutates during walk
+        log.debug("Child control traversal failed", exc_info=True)
 
     return results
 
@@ -87,14 +94,16 @@ def main():
                 if ctrl.ControlTypeName == "DocumentControl":
                     docs.append((d, ctrl))
             except Exception:
-                pass
+                # ControlTypeName read may fail on transient controls
+                log.debug("ControlTypeName check failed", exc_info=True)
             try:
                 child = ctrl.GetFirstChildControl()
                 while child:
                     collect_docs(child, d + 1)
                     child = child.GetNextSiblingControl()
             except Exception:
-                pass
+                # Child enumeration can fail if UIA tree mutates
+                log.debug("collect_docs child traversal failed", exc_info=True)
 
         collect_docs(chrome)
         print(f"  Found {len(docs)} DocumentControl(s) inside Chrome widget:")
@@ -114,7 +123,8 @@ def main():
                         chat_doc = doc
                         break
                 except Exception:
-                    pass
+                    # Name property may be unavailable on stale controls
+                    log.debug("vscode-webview name check failed", exc_info=True)
             if not chat_doc:
                 chat_doc = docs[-1][1]
 
