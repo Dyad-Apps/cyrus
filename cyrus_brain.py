@@ -29,6 +29,7 @@ import asyncio
 import threading
 import time
 import argparse
+import ctypes
 import queue as _stdlib_queue
 import socket
 
@@ -892,8 +893,11 @@ class PermissionWatcher:
         """Arm from PreToolUse hook — skip auto-allowed tools, announce others immediately."""
         if tool in self._AUTO_ALLOWED_TOOLS:
             return  # never needs permission
+        # New pre_tool means previous permission was resolved (user clicked in VS Code)
         if self._pending:
-            return  # already waiting for a response
+            print(f"[Permission] Clearing previous pending — new tool arrived ({self.project_name})")
+            self._pending = False
+            self._allow_btn = None
         self._allow_btn     = "keyboard"
         self._pending       = True
         self._pending_since = time.time()
@@ -1029,12 +1033,8 @@ class PermissionWatcher:
                         # Clear pre-arm if no dialog appeared within 2 s (tool was auto-allowed)
                         if self._pre_armed and time.time() > self._pre_armed_since + 2.0:
                             self._pre_armed = False
-                        # Keep pending for 20 s after announcement so transient
-                        # UIA misses don't clear it before the user responds.
-                        if self._pending and time.time() > getattr(self, "_pending_since", 0) + 20:
-                            self._pending   = False
-                            self._allow_btn = None
-                            _send_threadsafe({"type": "permission_resolved", "action": "timeout"}, loop)
+                        # Don't timeout pending — it clears when the next pre_tool arrives
+                        # (proof the previous tool was resolved) or via handle_response.
 
                     if p_ctrl and p_label != self._prompt_announced:
                         self._prompt_input_ctrl = p_ctrl
@@ -1354,12 +1354,25 @@ def _submit_to_vscode_impl(text: str) -> bool:
     pyperclip.copy(text)
     pyautogui.hotkey("ctrl", "v")
     time.sleep(0.15)
-    # Re-assert focus before Enter — another window can steal focus between paste and submit
+    # Re-assert focus before Enter — use Win32 API directly for reliability
     try:
-        win.activate()
+        hwnd = win._hWnd
+        ctypes.windll.user32.SetForegroundWindow(hwnd)
+    except Exception:
+        try:
+            win.activate()
+        except Exception:
+            pass
+    time.sleep(0.1)
+    # Verify the correct window is focused before pressing Enter
+    try:
+        fg = gw.getActiveWindow()
+        if fg and proj and proj not in (fg.title or ""):
+            print(f"[submit] WARNING: focus on '{fg.title}' not '{proj}' — retrying activate")
+            ctypes.windll.user32.SetForegroundWindow(win._hWnd)
+            time.sleep(0.15)
     except Exception:
         pass
-    time.sleep(0.05)
     pyautogui.press("enter")
     time.sleep(0.05)
 
