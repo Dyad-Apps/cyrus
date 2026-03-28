@@ -22,10 +22,18 @@ New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 # ── Build companion extension ─────────────────────────────────────────────────
 Write-Host "`n[1/3] Building companion extension..."
 Push-Location "$ScriptDir\cyrus-companion"
-$ErrorActionPreference = "Continue"
-npm run compile 2>&1 | Out-Null
-npx @vscode/vsce package --no-dependencies 2>&1 | Out-Null
-$ErrorActionPreference = "Stop"
+try {
+    npm run compile 2>&1 | Write-Host
+    npx @vscode/vsce package --no-dependencies 2>&1 | Write-Host
+    $VsixCheck = Get-ChildItem "*.vsix" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $VsixCheck) {
+        Write-Host "  WARNING: .vsix was not produced — extension will be missing from release" -ForegroundColor Red
+    } else {
+        Write-Host "  Built: $($VsixCheck.Name)" -ForegroundColor Green
+    }
+} catch {
+    Write-Host "  WARNING: Extension build failed — $_" -ForegroundColor Red
+}
 Pop-Location
 
 # ── Download Kokoro TTS models if not present ────────────────────────────────
@@ -51,6 +59,7 @@ Copy-Item "$ScriptDir\cyrus_voice.py"            "$VoiceStage\"
 Copy-Item "$ScriptDir\requirements-voice.txt"     "$VoiceStage\"
 Copy-Item "$ScriptDir\install-voice.ps1"          "$VoiceStage\"
 Copy-Item "$ScriptDir\install-voice.sh"           "$VoiceStage\"
+Copy-Item "$ScriptDir\install-voice.bat"          "$VoiceStage\"
 
 # Include Kokoro TTS models
 if (Test-Path $KokoroModel)  { Copy-Item $KokoroModel  "$VoiceStage\" }
@@ -66,19 +75,41 @@ New-Item -ItemType Directory -Force -Path $BrainStage | Out-Null
 
 Copy-Item "$ScriptDir\cyrus_brain.py"            "$BrainStage\"
 Copy-Item "$ScriptDir\cyrus_hook.py"             "$BrainStage\"
+Copy-Item "$ScriptDir\cyrus_brain_service.py"    "$BrainStage\"
 Copy-Item "$ScriptDir\requirements-brain.txt"     "$BrainStage\"
 Copy-Item "$ScriptDir\install-brain.ps1"          "$BrainStage\"
 Copy-Item "$ScriptDir\install-brain.sh"           "$BrainStage\"
+Copy-Item "$ScriptDir\install-brain.bat"          "$BrainStage\"
 
 # Include pre-built companion extension
-$VsixFile = Get-ChildItem "$ScriptDir\cyrus-companion\*.vsix" | Select-Object -First 1
+$VsixFile = Get-ChildItem "$ScriptDir\cyrus-companion\*.vsix" -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($VsixFile) {
-    New-Item -ItemType Directory -Force -Path "$BrainStage\cyrus-companion" | Out-Null
-    Copy-Item $VsixFile.FullName "$BrainStage\cyrus-companion\"
+    Copy-Item $VsixFile.FullName "$BrainStage\" -Force
+    Write-Host "       Included: $($VsixFile.Name)"
+} else {
+    Write-Host "  WARNING: No .vsix found — brain package will ship without companion extension!" -ForegroundColor Red
 }
 
 Compress-Archive -Path "$BrainStage\*" -DestinationPath "$DistDir\cyrus-brain-$Version.zip" -Force
 Remove-Item $BrainStage -Recurse -Force
+
+# ── Build Inno Setup installer ───────────────────────────────────────────────
+$InnoCompiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+if (-not (Test-Path $InnoCompiler)) {
+    $InnoCompiler = "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+}
+if (Test-Path $InnoCompiler) {
+    Write-Host "`n[4/4] Building Inno Setup installer..."
+    $IssFile = "$ScriptDir\installer\cyrus-brain-setup.iss"
+    & "$InnoCompiler" "/DMyAppVersion=$Version" "$IssFile"
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "       Installer built successfully." -ForegroundColor Green
+    } else {
+        Write-Host "       WARNING: Inno Setup build failed." -ForegroundColor Red
+    }
+} else {
+    Write-Host "`n[4/4] Skipping Inno Setup installer (ISCC.exe not found)." -ForegroundColor Yellow
+}
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 Write-Host "`n=== Release Built ===" -ForegroundColor Green

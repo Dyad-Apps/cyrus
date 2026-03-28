@@ -205,7 +205,7 @@ async def _send_to_mobile(msg: dict) -> None:
     if not _mobile_clients:
         return
     if msg.get("type") not in ("speak", "prompt", "thinking", "tool", "status",
-                                "permission_resolved"):
+                                "permission", "permission_resolved", "sessions"):
         return
     mobile_msg = dict(msg)
     if "full_text" in mobile_msg:
@@ -258,22 +258,35 @@ async def _speak_worker() -> None:
         await _send(msg)
 
 
-async def _speak_urgent(text: str) -> None:
-    """Interrupt current TTS and speak immediately (e.g. permission dialogs)."""
+async def _speak_urgent(text: str, project: str = "", voice_only: bool = False) -> None:
+    """Interrupt current TTS and speak immediately (e.g. permission dialogs).
+    voice_only=True skips mobile (caller already sent a separate mobile message)."""
     # Drain the speak queue — but forward queued messages to mobile first
     while not _speak_queue.empty():
         try:
             item = _speak_queue.get_nowait()
-            project, txt = item[0], item[1]
+            proj_, txt = item[0], item[1]
             full_text = item[2] if len(item) > 2 else None
-            msg = {"type": "speak", "text": txt, "project": project}
+            msg = {"type": "speak", "text": txt, "project": proj_}
             if full_text:
                 msg["full_text"] = full_text
             await _send_to_mobile(msg)
         except Exception:
             break
     await _send({"type": "stop_speech"})
-    await _send({"type": "speak", "text": text, "project": ""})
+    msg = {"type": "speak", "text": text, "project": project}
+    if voice_only:
+        # Send only to voice TCP, not mobile (avoid duplicate)
+        global _voice_writer
+        if _voice_writer is not None:
+            try:
+                async with _voice_lock:
+                    _voice_writer.write((json.dumps(msg) + "\n").encode())
+                    await _voice_writer.drain()
+            except Exception:
+                _voice_writer = None
+    else:
+        await _send(msg)
 
 
 def play_chime(loop: asyncio.AbstractEventLoop = None) -> None:
@@ -356,6 +369,9 @@ def _execute_cyrus_command(ctype: str, cmd: dict, spoken: str,
             with _project_locked_lock:
                 _project_locked = True
             session_mgr.on_session_switch(target, loop)
+            # Notify mobile of active project change
+            sessions = list(session_mgr._chat_watchers.keys())
+            _send_threadsafe({"type": "sessions", "sessions": sessions, "active": target}, loop)
             spoken = spoken or f"Switched to {target}. Routing locked."
             print(f"[Brain] {spoken}")
         else:
@@ -887,7 +903,9 @@ class PermissionWatcher:
         prompt = f"{prefix}Allow {tool}: {cmd_short}. Say yes or no."
         print(f"\n[Permission/hook] {prefix}{tool}: {cmd}")
         _send_threadsafe({"type": "stop_speech"}, loop)
-        asyncio.run_coroutine_threadsafe(_speak_urgent(prompt), loop)
+        # Send as "permission" (mobile gets Yes/No buttons) + speak for voice
+        _send_threadsafe({"type": "permission", "text": prompt, "project": self.project_name or ""}, loop)
+        asyncio.run_coroutine_threadsafe(_speak_urgent(prompt, self.project_name or "", voice_only=True), loop)
 
     def handle_response(self, text: str, loop: asyncio.AbstractEventLoop = None) -> bool:
         if not self._pending or not self._allow_btn:
@@ -1001,7 +1019,8 @@ class PermissionWatcher:
                                 prompt = f"{prefix}Allow: {cmd_label}. Say yes or no."
                             print(f"\n[Permission] {prefix}Claude wants to run: {cmd_label}")
                             _send_threadsafe({"type": "stop_speech"}, loop)
-                            asyncio.run_coroutine_threadsafe(_speak_urgent(prompt), loop)
+                            _send_threadsafe({"type": "permission", "text": prompt, "project": self.project_name or ""}, loop)
+                            asyncio.run_coroutine_threadsafe(_speak_urgent(prompt, self.project_name or "", voice_only=True), loop)
                         elif btn != "keyboard" and self._allow_btn == "keyboard":
                             # Hook armed with keyboard fallback — upgrade to real UIA button
                             self._allow_btn = btn
@@ -1024,7 +1043,7 @@ class PermissionWatcher:
                         prefix = f"In {self.project_name}: " if self.project_name else ""
                         prompt = f"{prefix}{p_label}"
                         print(f"\n[Input Prompt] {prompt}")
-                        asyncio.run_coroutine_threadsafe(_speak_urgent(prompt), loop)
+                        asyncio.run_coroutine_threadsafe(_speak_urgent(prompt, self.project_name or ""), loop)
                     elif not p_ctrl:
                         self._prompt_announced = ""
                         if self._prompt_pending:
@@ -1098,6 +1117,12 @@ class SessionManager:
         pw = PermissionWatcher(project_name=proj, target_subname=subname)
         pw.start(loop)
         self._perm_watchers[proj] = pw
+
+        # Push updated session list to mobile clients
+        with _active_project_lock:
+            active = _active_project
+        sessions = list(self._chat_watchers.keys())
+        _send_threadsafe({"type": "sessions", "sessions": sessions, "active": active}, loop)
 
     def start(self, loop: asyncio.AbstractEventLoop):
         def scan():
@@ -1405,11 +1430,28 @@ async def voice_reader(reader: asyncio.StreamReader,
 
 # ── Mobile WebSocket handler ──────────────────────────────────────────────────
 
-async def handle_mobile_ws(ws) -> None:
+async def handle_mobile_ws(ws, session_mgr: "SessionManager", loop: asyncio.AbstractEventLoop = None) -> None:
     """Handle a single mobile WebSocket client."""
+    global _active_project, _project_locked
     _mobile_clients.add(ws)
     addr = ws.remote_address
     print(f"[Brain] Mobile client connected: {addr}")
+
+    # Push current session list and active project on connect
+    try:
+        with _active_project_lock:
+            active = _active_project
+        sessions = list(session_mgr._chat_watchers.keys())
+        payload = json.dumps({
+            "type": "sessions",
+            "sessions": sessions,
+            "active": active,
+        })
+        print(f"[Brain] Sending sessions to mobile: {payload}")
+        await ws.send(payload)
+    except Exception as e:
+        print(f"[Brain] Failed to send sessions to mobile: {e}")
+
     try:
         async for raw in ws:
             try:
@@ -1419,10 +1461,33 @@ async def handle_mobile_ws(ws) -> None:
                     text = msg.get("text", "").strip()
                     if text:
                         await _utterance_queue.put((text, False))
+                elif mtype == "switch_session":
+                    target = msg.get("session", "").strip()
+                    if target and target in session_mgr._chat_watchers:
+                        with _active_project_lock:
+                            _active_project = target
+                        with _project_locked_lock:
+                            _project_locked = True
+                        session_mgr.on_session_switch(target, loop)
+                        sessions = list(session_mgr._chat_watchers.keys())
+                        _send_threadsafe({"type": "sessions", "sessions": sessions, "active": target}, loop)
+                        print(f"[Brain] Mobile switched to {target}. Routing locked.")
+                elif mtype == "get_sessions":
+                    with _active_project_lock:
+                        active = _active_project
+                    sessions = list(session_mgr._chat_watchers.keys())
+                    await ws.send(json.dumps({
+                        "type": "sessions",
+                        "sessions": sessions,
+                        "active": active,
+                    }))
                 elif mtype == "ping":
                     await ws.send(json.dumps({"type": "pong"}))
             except json.JSONDecodeError:
                 pass
+            except Exception as e:
+                print(f"[Brain] Mobile message handler error: {type(e).__name__}: {e}")
+                import traceback; traceback.print_exc()
     except Exception as e:
         print(f"[Brain] Mobile client error: {type(e).__name__}: {e}")
     finally:
@@ -1440,17 +1505,8 @@ async def routing_loop(session_mgr: SessionManager,
     while True:
         text, during_tts = await _utterance_queue.get()
 
-        # Echo guard: only wake-word interrupts get through during TTS
-        if during_tts or _tts_active_remote:
-            fw       = text.lower().strip().split()
-            has_wake = any(w.rstrip(",.!?") in WAKE_WORDS for w in fw)
-            if not has_wake:
-                continue
-            # Interrupt TTS and proceed
-            await _send({"type": "stop_speech"})
-            await asyncio.sleep(0.15)
-
-        # Permission dialog — binary response, bypass routing
+        # Permission dialog — check BEFORE echo guard so mobile yes/no isn't swallowed
+        # during TTS playback of the permission prompt
         handled = False
         for pw in session_mgr.perm_watchers:
             if pw.is_pending:
@@ -1472,6 +1528,16 @@ async def routing_loop(session_mgr: SessionManager,
                     break
         if handled:
             continue
+
+        # Echo guard: only wake-word interrupts get through during TTS
+        if during_tts or _tts_active_remote:
+            fw       = text.lower().strip().split()
+            has_wake = any(w.rstrip(",.!?") in WAKE_WORDS for w in fw)
+            if not has_wake:
+                continue
+            # Interrupt TTS and proceed
+            await _send({"type": "stop_speech"})
+            await asyncio.sleep(0.15)
 
         # Wake word check
         words = text.lower().strip().split()
@@ -1638,14 +1704,14 @@ async def handle_hook_connection(reader: asyncio.StreamReader,
                 if exit_code != 0:
                     spoken = f"{prefix}Command failed with exit code {exit_code}."
                     print(f"\n[PostTool] {spoken}")
-                    await _speak_urgent(spoken)
+                    await _speak_urgent(spoken, proj)
             elif tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
                 file_path = msg.get("file_path", "")
                 basename  = os.path.basename(file_path) if file_path else "a file"
                 verb      = "wrote" if tool == "Write" else "edited"
                 spoken    = f"{prefix}Claude {verb} {basename}."
                 print(f"\n[PostTool] {spoken}")
-                await _speak_queue.put(("", spoken))
+                await _speak_queue.put((proj, spoken))
 
         elif event == "notification":
             message = (msg.get("message") or "").strip()
@@ -1653,7 +1719,7 @@ async def handle_hook_connection(reader: asyncio.StreamReader,
                 prefix = f"In {proj}: " if proj else ""
                 spoken = f"{prefix}{message}"
                 print(f"\n[Notification] {spoken}")
-                await _speak_urgent(spoken)
+                await _speak_urgent(spoken, proj)
 
         elif event == "pre_compact":
             trigger = msg.get("trigger", "auto")
@@ -1774,7 +1840,7 @@ async def main() -> None:
     print(f"[Brain] Listening for Claude hooks on {hook_addr[0]}:{hook_addr[1]}")
     # Mobile WebSocket server (port 8768)
     mobile_server = await websockets.serve(
-        handle_mobile_ws,
+        lambda ws: handle_mobile_ws(ws, session_mgr, loop),
         args.host, MOBILE_PORT,
         ping_interval=None,
         ping_timeout=None,
